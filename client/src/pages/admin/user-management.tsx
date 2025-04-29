@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Layout from "@/components/Layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
