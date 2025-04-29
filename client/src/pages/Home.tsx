@@ -44,9 +44,5 @@ function HomeContent() {
 }
 
 export default function Home() {
-  return (
-    <FileProvider>
-      <HomeContent />
-    </FileProvider>
-  );
+  return <HomeContent />;
 }

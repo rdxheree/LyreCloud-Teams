@@ -12,8 +12,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: ImageIcon,
       bgColor: 'bg-purple-100',
-      iconColor: 'text-purple-500',
-      isPreviewable: true
+      iconColor: 'text-purple-500'
     };
   }
   
@@ -22,8 +21,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: FileTextIcon,
       bgColor: 'bg-primary-100',
-      iconColor: 'text-primary-500',
-      isPreviewable: true
+      iconColor: 'text-primary-500'
     };
   }
   
@@ -36,8 +34,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: FileSpreadsheetIcon,
       bgColor: 'bg-green-100',
-      iconColor: 'text-green-500',
-      isPreviewable: false
+      iconColor: 'text-green-500'
     };
   }
   
@@ -52,8 +49,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: FileCodeIcon,
       bgColor: 'bg-blue-100',
-      iconColor: 'text-blue-500',
-      isPreviewable: false
+      iconColor: 'text-blue-500'
     };
   }
   
@@ -67,8 +63,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: FileArchiveIcon,
       bgColor: 'bg-yellow-100',
-      iconColor: 'text-yellow-600',
-      isPreviewable: false
+      iconColor: 'text-yellow-600'
     };
   }
   
@@ -77,8 +72,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: FileAudioIcon,
       bgColor: 'bg-pink-100',
-      iconColor: 'text-pink-500',
-      isPreviewable: true
+      iconColor: 'text-pink-500'
     };
   }
   
@@ -87,8 +81,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
     return {
       icon: FileVideoIcon,
       bgColor: 'bg-red-100',
-      iconColor: 'text-red-500',
-      isPreviewable: true
+      iconColor: 'text-red-500'
     };
   }
   
@@ -96,8 +89,7 @@ export const getFileTypeInfo = (mimeType: string): FileTypeInfo => {
   return {
     icon: FileIcon,
     bgColor: 'bg-gray-100',
-    iconColor: 'text-gray-500',
-    isPreviewable: false
+    iconColor: 'text-gray-500'
   };
 };
 
