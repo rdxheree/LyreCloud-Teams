@@ -292,15 +292,26 @@ export class NextCloudStorage implements IStorage {
       const directoryContents = await this.client.getDirectoryContents(cdnsPath) as any[];
       console.log(`Found ${directoryContents.length} items in NextCloud cdns folder`);
       
-      // Map each file in NextCloud to our file structure and add if not already in our list
+      // Create a set of paths that exist in NextCloud to help with cleanup
+      const nextCloudPaths = new Set<string>();
+      const actualFiles = new Map<number, File>();
+      
+      // First pass: Find new files to add and track existing files
       for (const item of directoryContents) {
         if (item.type === 'file') {
+          // Track this path as existing in NextCloud
+          nextCloudPaths.add(item.filename); 
+          
           // Check if we already have this file in our memory map by path or filename
           const existingFile = Array.from(this.files.values()).find(
             file => file.path === item.filename || file.filename === item.basename
           );
           
-          if (!existingFile) {
+          if (existingFile) {
+            // File already exists in memory, keep it
+            actualFiles.set(existingFile.id, existingFile);
+          } else {
+            // This is a new file, add it
             // Parse the original filename from the stored path
             const decodedName = decodeURIComponent(item.basename);
             const fileId = this.fileCurrentId++;
@@ -339,7 +350,7 @@ export class NextCloudStorage implements IStorage {
             // Create a new file entry
             const newFile: File = {
               id: fileId,
-              filename: item.basename,
+              filename: item.basename, 
               originalFilename: decodedName,
               path: item.filename,
               size: item.size,
@@ -349,10 +360,26 @@ export class NextCloudStorage implements IStorage {
             };
             
             console.log(`Adding new file from NextCloud: ${decodedName}`);
-            this.files.set(fileId, newFile);
+            actualFiles.set(fileId, newFile);
           }
         }
       }
+      
+      // Second pass: Find files in memory that no longer exist in NextCloud and mark as deleted
+      // Use Array.from to avoid iterator issues with target compatibility
+      Array.from(this.files.entries()).forEach(([id, file]) => {
+        if (!file.isDeleted && !nextCloudPaths.has(file.path)) {
+          console.log(`File no longer exists in NextCloud, marking as deleted: ${file.originalFilename}`);
+          const updatedFile = { ...file, isDeleted: true };
+          actualFiles.set(id, updatedFile);
+        } else if (file.isDeleted) {
+          // Keep deleted files in our record
+          actualFiles.set(id, file);
+        }
+      });
+      
+      // Update our files map with the current state
+      this.files = actualFiles;
       
       // Return all valid files, sorted by upload date
       return Array.from(this.files.values())
@@ -420,6 +447,13 @@ export class NextCloudStorage implements IStorage {
   // Stream operations specific to NextCloud
   async createReadStream(filePath: string): Promise<Readable> {
     try {
+      // First check if the file exists to avoid unhandled errors
+      const exists = await this.client.exists(filePath);
+      if (!exists) {
+        console.error(`File does not exist in NextCloud: ${filePath}`);
+        throw new Error(`File not found: ${filePath}`);
+      }
+      
       // Get a readable stream from the file in NextCloud
       return this.client.createReadStream(filePath);
     } catch (error: any) {

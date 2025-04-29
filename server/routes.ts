@@ -18,6 +18,11 @@ try {
   console.error("Failed to create uploads directory:", error);
 }
 
+// Extended Express multer file type to add our custom cleanname property
+interface ExtendedFile extends Express.Multer.File {
+  cleanname?: string;
+}
+
 // Configure multer for file upload
 const storage_config = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -29,7 +34,7 @@ const storage_config = multer.diskStorage({
     
     // Let's store the clean name for saving to NextCloud without the unique ID
     // We'll handle collisions via overwrite in the storage class
-    file.cleanname = finalFilename;
+    (file as ExtendedFile).cleanname = finalFilename;
     
     // For local temporary files we still need a unique name to avoid collisions
     const uniqueFilename = `${nanoid()}-${finalFilename}`;
@@ -90,7 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Save to permanent storage (NextCloud if configured, local otherwise)
       // Use cleanname for NextCloud to avoid prefixed IDs, or fall back to filename
-      const path = await storage.saveFileFromPath(req.file.path, (req.file as any).cleanname || req.file.filename);
+      const path = await storage.saveFileFromPath(req.file.path, (req.file as ExtendedFile).cleanname || req.file.filename);
       
       const fileData = {
         filename: req.file.filename,
@@ -132,6 +137,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Download a file
+  // Public CDN link handler
+  app.get('/cdn/:filename', async (req: Request, res: Response) => {
+    try {
+      const requestedFilename = req.params.filename;
+      if (!requestedFilename) {
+        return res.status(400).json({ message: 'Missing filename' });
+      }
+      
+      // Find the file by filename
+      const file = await storage.getFileByFilename(requestedFilename);
+      if (!file) {
+        return res.status(404).json({ message: 'File not found' });
+      }
+      
+      // Verify file exists in storage
+      let fileExists = true;
+      if (process.env.NEXTCLOUD_URL) {
+        try {
+          const client = (storage as any).client;
+          if (client && typeof client.exists === 'function') {
+            fileExists = await client.exists(file.path);
+          }
+        } catch (existsError) {
+          console.error('Error checking if file exists:', existsError);
+          // Continue anyway
+        }
+      }
+      
+      if (!fileExists) {
+        return res.status(404).json({ message: 'File no longer exists in storage' });
+      }
+      
+      // Serve the file directly without attachment disposition
+      // This allows the browser to display it inline if it's displayable
+      res.setHeader('Content-Type', file.mimeType);
+      
+      // Try to get a readable stream
+      try {
+        const fileStream = await storage.createReadStream(file.path);
+        fileStream.pipe(res);
+      } catch (streamError) {
+        console.error('Error streaming file:', streamError);
+        return res.status(404).json({ message: 'File not found or could not be accessed' });
+      }
+    } catch (error) {
+      console.error('Error serving CDN file:', error);
+      return res.status(500).json({ message: 'Failed to serve file' });
+    }
+  });
+
+  // Download a file
   app.get('/api/files/:id/download', async (req: Request, res: Response) => {
     try {
       const fileId = parseInt(req.params.id);
@@ -145,6 +201,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       try {
+        // Try to verify the file exists before streaming
+        let fileExists = true;
+        
+        if (process.env.NEXTCLOUD_URL) {
+          // For NextCloud, check if the file exists to prevent crashes
+          try {
+            // This is an internal implementation detail of the storage class
+            // Using client directly is not ideal but works for now
+            const client = (storage as any).client;
+            if (client && typeof client.exists === 'function') {
+              fileExists = await client.exists(file.path);
+            }
+          } catch (existsError) {
+            console.error('Error checking if file exists:', existsError);
+            // Continue anyway and let the stream creation fail if needed
+          }
+        }
+        
+        if (!fileExists) {
+          console.error(`File ${file.id} exists in database but not in storage: ${file.path}`);
+          return res.status(404).json({ message: 'File no longer exists in storage' });
+        }
+        
         // Set content disposition to attachment to force download
         res.setHeader('Content-Disposition', `attachment; filename="${file.originalFilename}"`);
         res.setHeader('Content-Type', file.mimeType);
