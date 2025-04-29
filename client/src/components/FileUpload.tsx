@@ -17,46 +17,77 @@ export default function FileUpload() {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     
-    const file = acceptedFiles[0];
-    
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: "File too large",
-        description: "Maximum file size is 1GB",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Handle the upload with progress tracking
-    uploadFile({
-      file, 
-      onProgress: (progress, uploadedBytes) => {
-        setCurrentProgress({
-          file: {
-            name: file.name,
-            size: file.size,
-          },
-          progress,
-          uploadedBytes,
+    // Process multiple files sequentially
+    const uploadFiles = async () => {
+      for (let i = 0; i < acceptedFiles.length; i++) {
+        const file = acceptedFiles[i];
+        
+        // Check file size
+        if (file.size > MAX_FILE_SIZE) {
+          toast({
+            title: "File too large",
+            description: `${file.name} is too large. Maximum file size is 1GB`,
+            variant: "destructive",
+          });
+          continue; // Skip this file but process the rest
+        }
+        
+        // Show which file is being uploaded out of the total
+        toast({
+          title: `Uploading file ${i + 1} of ${acceptedFiles.length}`,
+          description: file.name,
+        });
+        
+        try {
+          // Handle the upload with progress tracking
+          await new Promise<void>((resolve, reject) => {
+            uploadFile({
+              file, 
+              onProgress: (progress, uploadedBytes) => {
+                setCurrentProgress({
+                  file: {
+                    name: file.name,
+                    size: file.size,
+                  },
+                  progress,
+                  uploadedBytes,
+                });
+              }
+            }, {
+              onSuccess: () => resolve(),
+              onError: (error) => reject(error),
+              onSettled: () => {
+                // Clear progress when upload is complete or fails
+                setTimeout(() => {
+                  setCurrentProgress(null);
+                }, 1000);
+              }
+            });
+          });
+        } catch (error) {
+          console.error(`Error uploading ${file.name}:`, error);
+          // Continue with the next file even if one fails
+        }
+      }
+      
+      // Notify when all uploads are complete
+      if (acceptedFiles.length > 1) {
+        toast({
+          title: "Bulk upload complete",
+          description: `Successfully processed ${acceptedFiles.length} files`,
         });
       }
-    }, {
-      onSettled: () => {
-        // Clear progress when upload is complete or fails
-        setTimeout(() => {
-          setCurrentProgress(null);
-        }, 1000);
-      }
-    });
+    };
+    
+    // Start the upload process
+    uploadFiles();
     
   }, [uploadFile, setCurrentProgress, toast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     disabled: isPending,
-    maxFiles: 1,
+    multiple: true, // Allow multiple files
   });
 
   return (
