@@ -5,11 +5,8 @@ import { promisify } from "util";
 import { nanoid } from "nanoid";
 import { createClient, WebDAVClient } from "webdav";
 import { Readable } from "stream";
-// Using enhanced storage implementation
 
-// modify the interface with any CRUD methods
-// you might need
-
+// Interface defining storage operations
 export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
@@ -38,6 +35,7 @@ try {
   console.error("Failed to create uploads directory:", error);
 }
 
+// Local memory storage implementation
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private files: Map<number, File>;
@@ -132,6 +130,7 @@ export class MemStorage implements IStorage {
   }
 }
 
+// Enhanced NextCloud storage implementation that synchronizes with NextCloud
 export class NextCloudStorage implements IStorage {
   private users: Map<number, User>;
   private files: Map<number, File>;
@@ -151,7 +150,7 @@ export class NextCloudStorage implements IStorage {
     const nextcloudUrl = process.env.NEXTCLOUD_URL;
     const username = process.env.NEXTCLOUD_USERNAME;
     const password = process.env.NEXTCLOUD_PASSWORD;
-    this.baseFolder = process.env.NEXTCLOUD_FOLDER || '/lyrecloud';
+    this.baseFolder = process.env.NEXTCLOUD_FOLDER || '/LyreTeams';
     
     if (!nextcloudUrl || !username || !password) {
       throw new Error('NextCloud credentials not provided. Please set NEXTCLOUD_URL, NEXTCLOUD_USERNAME, and NEXTCLOUD_PASSWORD environment variables.');
@@ -179,10 +178,7 @@ export class NextCloudStorage implements IStorage {
       password
     });
     
-    // This will be initialized asynchronously
-    
-    // We'll initialize the folder later in async operations
-    // No need to await here in constructor
+    // Initialize folders, but don't await in constructor
     this.initializeStorage();
   }
   
@@ -286,11 +282,89 @@ export class NextCloudStorage implements IStorage {
     return user;
   }
   
-  // File methods
+  // Enhanced file methods with NextCloud synchronization
   async getFiles(): Promise<File[]> {
-    return Array.from(this.files.values())
-      .filter(file => !file.isDeleted)
-      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    try {
+      // Sync with NextCloud directory to find any new files
+      const cdnsPath = `${this.baseFolder}/cdns`;
+      console.log(`Scanning NextCloud directory: ${cdnsPath}`);
+      
+      const directoryContents = await this.client.getDirectoryContents(cdnsPath) as any[];
+      console.log(`Found ${directoryContents.length} items in NextCloud cdns folder`);
+      
+      // Map each file in NextCloud to our file structure and add if not already in our list
+      for (const item of directoryContents) {
+        if (item.type === 'file') {
+          // Check if we already have this file in our memory map by path
+          const existingFile = Array.from(this.files.values()).find(
+            file => file.path === item.filename
+          );
+          
+          if (!existingFile) {
+            // Parse the original filename from the stored path
+            const decodedName = decodeURIComponent(item.basename);
+            const fileId = this.fileCurrentId++;
+            
+            // Try to determine MIME type from file extension
+            const extension = decodedName.split('.').pop()?.toLowerCase() || '';
+            let mimeType = 'application/octet-stream'; // Default
+            
+            // Map common extensions to MIME types
+            const mimeTypesMap: Record<string, string> = {
+              'jpg': 'image/jpeg',
+              'jpeg': 'image/jpeg',
+              'png': 'image/png',
+              'gif': 'image/gif',
+              'webp': 'image/webp',
+              'pdf': 'application/pdf',
+              'mp4': 'video/mp4',
+              'mov': 'video/quicktime',
+              'mp3': 'audio/mpeg',
+              'wav': 'audio/wav',
+              'txt': 'text/plain',
+              'doc': 'application/msword',
+              'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'xls': 'application/vnd.ms-excel',
+              'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'ppt': 'application/vnd.ms-powerpoint',
+              'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              'zip': 'application/zip',
+              'rar': 'application/x-rar-compressed'
+            };
+            
+            if (extension in mimeTypesMap) {
+              mimeType = mimeTypesMap[extension];
+            }
+            
+            // Create a new file entry
+            const newFile: File = {
+              id: fileId,
+              filename: item.basename,
+              originalFilename: decodedName,
+              path: item.filename,
+              size: item.size,
+              mimeType: mimeType,
+              uploadedAt: item.lastmod ? new Date(item.lastmod) : new Date(),
+              isDeleted: false
+            };
+            
+            console.log(`Adding new file from NextCloud: ${decodedName}`);
+            this.files.set(fileId, newFile);
+          }
+        }
+      }
+      
+      // Return all valid files, sorted by upload date
+      return Array.from(this.files.values())
+        .filter(file => !file.isDeleted)
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    } catch (error) {
+      console.error('Error syncing files with NextCloud:', error);
+      // If error occurs, fall back to in-memory files
+      return Array.from(this.files.values())
+        .filter(file => !file.isDeleted)
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    }
   }
 
   async getFile(id: number): Promise<File | undefined> {
