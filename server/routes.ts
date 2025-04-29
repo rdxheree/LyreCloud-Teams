@@ -80,24 +80,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No file uploaded' });
       }
 
+      // Save to permanent storage (NextCloud if configured, local otherwise)
+      const path = await storage.saveFileFromPath(req.file.path, req.file.filename);
+      
       const fileData = {
         filename: req.file.filename,
         originalFilename: req.file.originalname,
         size: req.file.size,
         mimeType: req.file.mimetype,
-        path: req.file.path,
+        path: path, // This is either the local path or NextCloud path
       };
 
       // Validate with zod schema
       const validationResult = insertFileSchema.safeParse(fileData);
       if (!validationResult.success) {
         // Delete the uploaded file if validation fails
-        fs.unlinkSync(req.file.path);
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (unlinkError) {
+          console.error('Failed to delete temporary file after validation failure:', unlinkError);
+        }
         const validationError = fromZodError(validationResult.error);
         return res.status(400).json({ message: validationError.message });
       }
 
       const savedFile = await storage.createFile(fileData);
+      
+      // Delete the temporary local file if we're using NextCloud
+      if (process.env.NEXTCLOUD_URL && req.file.path !== path) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (unlinkError) {
+          console.error('Failed to delete temporary file after successful upload:', unlinkError);
+        }
+      }
+      
       return res.status(201).json(savedFile);
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -118,18 +135,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'File not found' });
       }
 
-      // Check if file exists on filesystem
-      if (!fs.existsSync(file.path)) {
-        return res.status(404).json({ message: 'File not found on server' });
+      try {
+        // Set content disposition to attachment to force download
+        res.setHeader('Content-Disposition', `attachment; filename="${file.originalFilename}"`);
+        res.setHeader('Content-Type', file.mimeType);
+        
+        // Get a readable stream from storage (works for both local and NextCloud)
+        const fileStream = await storage.createReadStream(file.path);
+        fileStream.pipe(res);
+      } catch (streamError) {
+        console.error('Error streaming file:', streamError);
+        return res.status(404).json({ message: 'File not found or could not be accessed' });
       }
-
-      // Set content disposition to attachment to force download
-      res.setHeader('Content-Disposition', `attachment; filename="${file.originalFilename}"`);
-      res.setHeader('Content-Type', file.mimeType);
-      
-      // Stream the file to the client
-      const fileStream = fs.createReadStream(file.path);
-      fileStream.pipe(res);
     } catch (error) {
       console.error('Error downloading file:', error);
       return res.status(500).json({ message: 'Failed to download file' });
