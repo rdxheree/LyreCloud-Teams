@@ -28,35 +28,63 @@ export default function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="py-4 px-6 md:px-10 flex items-center justify-between soft-element mb-8">
+    <header className="py-4 px-4 md:px-10 flex items-center justify-between soft-element mb-4 md:mb-8">
       <div className="flex items-center">
         {user && isMobile && (
           <Button variant="ghost" size="icon" onClick={onMenuClick} className="mr-2">
             <Menu className="h-5 w-5" />
           </Button>
         )}
-        <CloudIcon className="h-8 w-8 text-primary" />
-        <h1 className="ml-3 text-2xl font-semibold text-primary-600">LyreCloud Teams</h1>
+        <CloudIcon className="h-7 md:h-8 w-7 md:w-8 text-primary" />
+        <h1 className="ml-2 md:ml-3 text-lg md:text-2xl font-semibold text-primary-600">LyreCloud Teams</h1>
       </div>
 
       {user && (
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
+          {/* Mobile Profile Menu */}
+          {isMobile && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>
+                      {user.username.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    {user.username}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Log Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          
           {/* Desktop Navigation */}
           {!isMobile && (
             <div className="flex items-center gap-4">
               <Link href="/">
-                <a className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
+                <button className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
                   <FileIcon className="h-4 w-4" />
                   Files
-                </a>
+                </button>
               </Link>
               
               {user.role === "admin" && (
                 <Link href="/admin/user-management">
-                  <a className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/admin/user-management' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
+                  <button className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/admin/user-management' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
                     <UserCog className="h-4 w-4" />
                     User Management
-                  </a>
+                  </button>
                 </Link>
               )}
             </div>

@@ -26,11 +26,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const activeLinkClass = linkClass + " bg-gray-100 font-medium";
 
   return (
-    <div className="fixed inset-0 z-50 lg:static lg:z-auto">
+    <div className={`fixed inset-0 z-50 lg:static lg:z-auto ${!isOpen && isMobile ? 'pointer-events-none' : ''}`}>
       {/* Overlay for mobile */}
       {isMobile && (
         <div 
-          className="absolute inset-0 bg-black/50" 
+          className={`absolute inset-0 bg-black/50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
           onClick={onClose}
         />
       )}
@@ -49,26 +49,26 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <ul>
             <li>
               <Link href="/">
-                <a 
+                <button 
                   className={location === "/" ? activeLinkClass : linkClass}
                   onClick={isMobile ? onClose : undefined}
                 >
                   <FileIcon className="h-5 w-5" />
                   Files
-                </a>
+                </button>
               </Link>
             </li>
             
             {user && user.role === "admin" && (
               <li>
                 <Link href="/admin/user-management">
-                  <a 
+                  <button 
                     className={location === "/admin/user-management" ? activeLinkClass : linkClass}
                     onClick={isMobile ? onClose : undefined}
                   >
                     <UserCog className="h-5 w-5" />
                     User Management
-                  </a>
+                  </button>
                 </Link>
               </li>
             )}

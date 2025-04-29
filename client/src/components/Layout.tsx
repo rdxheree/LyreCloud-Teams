@@ -16,10 +16,10 @@ export default function Layout({ children }: LayoutProps) {
     <div className="flex flex-col min-h-screen">
       <Header onMenuClick={() => setSidebarOpen(true)} />
       
-      <div className="flex flex-1">
+      <div className="flex flex-1 relative">
         {user && <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
         
-        <main className="flex-grow px-6 md:px-10 pb-10">
+        <main className="flex-grow w-full px-4 md:px-10 pb-10">
           <div className="max-w-5xl mx-auto">
             {children}
           </div>
