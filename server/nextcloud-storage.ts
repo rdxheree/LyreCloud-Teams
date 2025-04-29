@@ -157,7 +157,13 @@ export class NextCloudStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     try {
       const id = this.userCurrentId++;
-      const user: User = { ...insertUser, id };
+      const user: User = { 
+        ...insertUser, 
+        id,
+        role: insertUser.role || 'user',
+        isApproved: insertUser.isApproved !== undefined ? insertUser.isApproved : false,
+        status: insertUser.status || 'pending'
+      };
       this.users.set(id, user);
       
       // Save users to a users.json file in NextCloud
@@ -200,6 +206,14 @@ export class NextCloudStorage implements IStorage {
       console.error(`Error deleting user ${id}:`, error);
       throw new Error(`Failed to delete user: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+  
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+  
+  async getPendingUsers(): Promise<User[]> {
+    return Array.from(this.users.values()).filter(user => user.status === 'pending');
   }
   
   private async saveUsersToNextCloud(): Promise<void> {
