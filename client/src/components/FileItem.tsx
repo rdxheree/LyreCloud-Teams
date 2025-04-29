@@ -15,7 +15,6 @@ interface FileItemProps {
 export default function FileItem({ file }: FileItemProps) {
   const { toast } = useToast();
   const { setSelectedFileId, setIsDeleteModalOpen } = useFileContext();
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fileTypeInfo = getFileTypeInfo(file.mimeType);
   const { icon: FileTypeIcon, bgColor, iconColor } = fileTypeInfo;
   const isPreviewable = file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
@@ -66,84 +65,54 @@ export default function FileItem({ file }: FileItemProps) {
   const previewUrl = `/api/files/${file.id}/download`;
 
   // Render the appropriate preview content based on file type
-  const renderPreviewContent = () => {
+  const renderPreview = () => {
     if (file.mimeType.startsWith('image/')) {
       return (
-        <div className="flex justify-center">
+        <div className="h-28 w-28 overflow-hidden rounded-lg mr-4 flex-shrink-0">
           <img 
             src={previewUrl} 
             alt={file.originalFilename} 
-            className="max-w-full max-h-[70vh] object-contain rounded-lg" 
+            className="h-full w-full object-cover" 
           />
         </div>
       );
     } else if (file.mimeType.startsWith('video/')) {
       return (
-        <div className="flex justify-center">
+        <div className="h-28 w-28 overflow-hidden rounded-lg mr-4 flex-shrink-0 relative">
           <video 
-            controls 
-            className="max-w-full max-h-[70vh] rounded-lg"
+            className="h-full w-full object-cover"
+            preload="metadata"
           >
-            <source src={previewUrl} type={file.mimeType} />
-            Your browser does not support the video tag.
+            <source src={`${previewUrl}#t=0.1`} type={file.mimeType} />
           </video>
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg">
+            <FileTypeIcon className={`h-10 w-10 text-white`} />
+          </div>
         </div>
       );
     } else if (file.mimeType.startsWith('audio/')) {
       return (
-        <div className="flex justify-center p-4">
-          <audio controls className="w-full">
-            <source src={previewUrl} type={file.mimeType} />
-            Your browser does not support the audio tag.
-          </audio>
+        <div className={`p-3 h-28 w-28 ${bgColor} rounded-lg mr-4 flex items-center justify-center flex-shrink-0`}>
+          <FileTypeIcon className={`h-16 w-16 ${iconColor}`} />
         </div>
       );
     } else {
       return (
-        <div className="flex flex-col items-center justify-center p-6 text-center">
-          <FileTypeIcon className="h-20 w-20 mb-4 text-gray-400" />
-          <p className="text-lg font-medium">No preview available</p>
-          <p className="text-sm text-gray-500 mt-2">Download the file to view its contents</p>
+        <div className={`p-3 h-28 w-28 ${bgColor} rounded-lg mr-4 flex items-center justify-center flex-shrink-0`}>
+          <FileTypeIcon className={`h-16 w-16 ${iconColor}`} />
         </div>
       );
     }
   };
 
   return (
-    <>
-      <div className="soft-element p-4 rounded-xl flex flex-col md:flex-row md:items-center">
-        <div className="flex items-center flex-grow">
-          {isPreviewable ? (
-            <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-              <DialogTrigger asChild>
-                <div className={`p-3 ${bgColor} rounded-lg mr-4 cursor-pointer transition-transform hover:scale-105`}>
-                  <FileTypeIcon className={`h-8 w-8 ${iconColor}`} />
-                </div>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl">
-                <DialogTitle className="text-xl font-semibold mb-4 text-center">
-                  {file.originalFilename}
-                </DialogTitle>
-                <div className="pt-6">
-                  {renderPreviewContent()}
-                  <div className="mt-4 flex justify-center space-x-4">
-                    <Button onClick={handleDownload} className="soft-button">
-                      <Download className="h-4 w-4 mr-2" /> Download
-                    </Button>
-                    <Button onClick={handleCopyLink} className="soft-button">
-                      <Copy className="h-4 w-4 mr-2" /> Copy Link
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          ) : (
-            <div className={`p-3 ${bgColor} rounded-lg mr-4`}>
-              <FileTypeIcon className={`h-8 w-8 ${iconColor}`} />
-            </div>
-          )}
-          
-          <div className="flex-grow">
+    <div className="soft-element p-4 rounded-xl">
+      <div className="flex flex-col md:flex-row">
+        {/* File Preview */}
+        {renderPreview()}
+        
+        <div className="flex flex-col md:flex-row flex-grow justify-between">
+          <div className="flex-grow mt-2 md:mt-0">
             <h3 className="font-medium text-neutral-800 mb-1">
               {file.originalFilename}
             </h3>
@@ -152,11 +121,19 @@ export default function FileItem({ file }: FileItemProps) {
               <span className="mr-4">{formatFileSize(file.size)}</span>
               <span>Uploaded {formatUploadDate(file.uploadedAt)}</span>
             </div>
+            
+            {/* For audio files, show the inline player */}
+            {file.mimeType.startsWith('audio/') && (
+              <div className="mt-3 max-w-md">
+                <audio controls className="w-full h-8">
+                  <source src={previewUrl} type={file.mimeType} />
+                  Your browser does not support the audio tag.
+                </audio>
+              </div>
+            )}
           </div>
-        </div>
-        
-        <div className="flex mt-4 md:mt-0 space-x-2">
-          {isPreviewable && (
+          
+          <div className="flex mt-4 md:mt-0 space-x-2 md:justify-end items-start">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -164,77 +141,58 @@ export default function FileItem({ file }: FileItemProps) {
                     variant="outline" 
                     size="icon" 
                     className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
-                    onClick={() => setIsPreviewOpen(true)}
+                    onClick={handleCopyLink}
                   >
-                    <Expand className="h-5 w-5" />
-                    <span className="sr-only">Preview</span>
+                    <Copy className="h-5 w-5" />
+                    <span className="sr-only">Copy Link</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Preview</p>
+                  <p>Copy Link</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )}
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
-                  onClick={handleCopyLink}
-                >
-                  <Copy className="h-5 w-5" />
-                  <span className="sr-only">Copy Link</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Copy Link</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
-                  onClick={handleDownload}
-                >
-                  <Download className="h-5 w-5" />
-                  <span className="sr-only">Download</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Download</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="soft-button p-2 rounded-lg text-neutral-600 hover:text-red-500"
-                  onClick={handleDelete}
-                >
-                  <Trash2 className="h-5 w-5" />
-                  <span className="sr-only">Delete</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Delete</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
+                    onClick={handleDownload}
+                  >
+                    <Download className="h-5 w-5" />
+                    <span className="sr-only">Download</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="soft-button p-2 rounded-lg text-neutral-600 hover:text-red-500"
+                    onClick={handleDelete}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <span className="sr-only">Delete</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Delete</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

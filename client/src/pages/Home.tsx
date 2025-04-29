@@ -5,7 +5,7 @@ import FileUpload from "@/components/FileUpload";
 import UploadProgress from "@/components/UploadProgress";
 import FilesList from "@/components/FilesList";
 import DeleteConfirmationModal from "@/components/DeleteConfirmationModal";
-import { FileProvider, useFileContext } from "@/contexts/FileContext";
+import { useFileContext } from "@/contexts/FileContext";
 import { useGetFiles } from "@/hooks/useFiles";
 
 function HomeContent() {

@@ -19,12 +19,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <FileProvider>
-        <TooltipProvider>
+      <TooltipProvider>
+        <FileProvider>
           <Toaster />
           <Router />
-        </TooltipProvider>
-      </FileProvider>
+        </FileProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }
