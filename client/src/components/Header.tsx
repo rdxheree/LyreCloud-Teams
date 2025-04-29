@@ -1,4 +1,4 @@
-import { CloudIcon, Menu, User, UserCog, LogOut, FileIcon } from "lucide-react";
+import { Menu, User, UserCog, LogOut, FileIcon, CloudIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
@@ -35,7 +35,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5" />
           </Button>
         )}
-        <CloudIcon className="h-7 md:h-8 w-7 md:w-8 text-primary flex-shrink-0" />
+        <img src={lyreCloudLogo} alt="LyreCloud Logo" className="h-7 md:h-8 w-auto flex-shrink-0" />
         <h1 className="ml-2 md:ml-3 text-lg md:text-2xl font-semibold text-primary-600 truncate">LyreCloud Teams</h1>
       </div>
 
