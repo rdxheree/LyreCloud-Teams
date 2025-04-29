@@ -168,7 +168,7 @@ export class NextCloudStorage implements IStorage {
       const cdnsPath = `${this.baseFolder}/cdns`;
       console.log(`Scanning NextCloud directory: ${cdnsPath}`);
       
-      const directoryContents = await this.client.getDirectoryContents(cdnsPath);
+      const directoryContents = await this.client.getDirectoryContents(cdnsPath) as any[];
       console.log(`Found ${directoryContents.length} items in NextCloud cdns folder`);
       
       // Map each file in NextCloud to our file structure and add if not already in our list

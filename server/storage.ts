@@ -5,6 +5,7 @@ import { promisify } from "util";
 import { nanoid } from "nanoid";
 import { createClient, WebDAVClient } from "webdav";
 import { Readable } from "stream";
+import { NextCloudStorage } from "./nextcloud-storage";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -379,8 +380,6 @@ let storage: IStorage;
 if (process.env.NEXTCLOUD_URL && process.env.NEXTCLOUD_USERNAME && process.env.NEXTCLOUD_PASSWORD) {
   console.log('Using NextCloud storage');
   try {
-    // Use the enhanced NextCloudStorage implementation
-    const { NextCloudStorage } = require('./nextcloud-storage');
     storage = new NextCloudStorage();
   } catch (error) {
     console.error('Failed to initialize NextCloud storage:', error);
