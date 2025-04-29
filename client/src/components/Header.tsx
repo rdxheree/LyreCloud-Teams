@@ -1,7 +1,9 @@
-import { CloudIcon, Menu, User, UserCog, LogOut } from "lucide-react";
+import { CloudIcon, Menu, User, UserCog, LogOut, FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,9 +13,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export default function Header() {
+interface HeaderProps {
+  onMenuClick: () => void;
+}
+
+export default function Header({ onMenuClick }: HeaderProps) {
   const { user, logoutMutation } = useAuth();
-  const [_, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const isMobile = useIsMobile();
 
   const handleLogout = () => {
     logoutMutation.mutate();
@@ -23,49 +30,72 @@ export default function Header() {
   return (
     <header className="py-4 px-6 md:px-10 flex items-center justify-between soft-element mb-8">
       <div className="flex items-center">
+        {user && isMobile && (
+          <Button variant="ghost" size="icon" onClick={onMenuClick} className="mr-2">
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
         <CloudIcon className="h-8 w-8 text-primary" />
         <h1 className="ml-3 text-2xl font-semibold text-primary-600">LyreCloud Teams</h1>
       </div>
 
       {user && (
         <div className="flex items-center gap-4">
-          <span className="text-sm hidden md:inline-block">
-            Welcome, <span className="font-semibold">{user.username}</span>
-          </span>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  {user.username}
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-
+          {/* Desktop Navigation */}
+          {!isMobile && (
+            <div className="flex items-center gap-4">
+              <Link href="/">
+                <a className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
+                  <FileIcon className="h-4 w-4" />
+                  Files
+                </a>
+              </Link>
+              
               {user.role === "admin" && (
-                <>
-                  <DropdownMenuItem asChild>
-                    <Link href="/admin/user-management" className="cursor-pointer flex items-center gap-2">
-                      <UserCog className="h-4 w-4" />
-                      User Management
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
+                <Link href="/admin/user-management">
+                  <a className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/admin/user-management' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
+                    <UserCog className="h-4 w-4" />
+                    User Management
+                  </a>
+                </Link>
               )}
+            </div>
+          )}
+          
+          {/* Profile Section - Desktop Only */}
+          {!isMobile && (
+            <span className="text-sm inline-block">
+              Welcome, <span className="font-semibold">{user.username}</span>
+            </span>
+          )}
 
-              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600">
-                <LogOut className="h-4 w-4 mr-2" />
-                Log Out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Profile Menu - Desktop Only */}
+          {!isMobile && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>
+                      {user.username.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    {user.username}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Log Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       )}
     </header>

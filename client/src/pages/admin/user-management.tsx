@@ -43,7 +43,7 @@ type User = {
   isApproved: boolean;
 };
 
-export default function UserManagementPage() {
+function UserManagementContent() {
   const { user } = useAuth();
   const [_, navigate] = useLocation();
   const { toast } = useToast();
@@ -473,5 +473,13 @@ export default function UserManagementPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function UserManagementPage() {
+  return (
+    <Layout>
+      <UserManagementContent />
+    </Layout>
   );
 }
