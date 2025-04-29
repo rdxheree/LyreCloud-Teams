@@ -1,15 +1,12 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./enhanced-storage";
+import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
-import { create } from "domain";
-import createMemoryStore from "memorystore";
-import connectPg from "connect-pg-simple";
-import { pool } from "./db";
+import MemoryStore from "memorystore";
 
 declare global {
   namespace Express {
@@ -33,30 +30,18 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
-  const MemoryStore = createMemoryStore(session);
-  const PostgresSessionStore = connectPg(session);
-  
-  // Choose session store based on environment
-  let sessionStore;
-  if (process.env.DATABASE_URL) {
-    sessionStore = new PostgresSessionStore({ 
-      pool, 
-      createTableIfMissing: true 
-    });
-  } else {
-    sessionStore = new MemoryStore({
-      checkPeriod: 86400000, // Prune expired entries every 24h
-    });
-  }
+  const MemStore = MemoryStore(session);
   
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || 'lyrecloud_secret_key',
+    secret: process.env.SESSION_SECRET || "lyrecloud-secret-key",
     resave: false,
     saveUninitialized: false,
-    store: sessionStore,
+    store: new MemStore({
+      checkPeriod: 86400000 // Prune expired entries every 24h
+    }),
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
   };
 
@@ -65,297 +50,302 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Load initial users from NextCloud if needed
-  setupDefaultAdmin();
-  
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        if (!user || !(await comparePasswords(password, user.password))) {
-          return done(null, false);
+        if (!user) {
+          return done(null, false, { message: "Incorrect username" });
         }
         
-        // Only allow approved users to login
-        if (!user.isApproved) {
-          return done(null, false);
+        if (!(await comparePasswords(password, user.password))) {
+          return done(null, false, { message: "Incorrect password" });
+        }
+        
+        if (user.status !== "approved") {
+          return done(null, false, { message: "Your account is pending approval" });
         }
         
         return done(null, user);
-      } catch (error) {
-        return done(error);
+      } catch (err) {
+        return done(err);
       }
-    }),
+    })
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
+  passport.serializeUser((user, done) => {
+    done(null, user.id);
+  });
+
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await storage.getUser(id);
-      done(null, user || undefined);
-    } catch (error) {
-      done(error);
+      if (!user) {
+        return done(new Error("User not found"));
+      }
+      done(null, user);
+    } catch (err) {
+      done(err);
     }
   });
 
-  app.post("/api/register", async (req, res, next) => {
+  // Authentication routes
+  app.post("/api/register", async (req: Request, res: Response) => {
     try {
-      // Check if a user with the requested username already exists
-      const existingUser = await storage.getUserByUsername(req.body.username);
+      const { username, password } = req.body;
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
-
-      // Create the registration request with pending status
-      const user = await storage.createUser({
-        ...req.body,
-        password: await hashPassword(req.body.password),
-        isApproved: false,
-        status: 'pending',
-        role: 'user',
+      
+      // Hash password and create user
+      const hashedPassword = await hashPassword(password);
+      const newUser = await storage.createUser({
+        username,
+        password: hashedPassword,
+        role: "user",
+        status: "pending",
+        isApproved: false
       });
-
-      return res.status(201).json({ 
-        message: "Registration request submitted, waiting for admin approval" 
+      
+      // Don't include password in response
+      const { password: _, ...userWithoutPassword } = newUser;
+      
+      res.status(201).json({ 
+        message: "Registration successful. Your account is pending admin approval." 
       });
     } catch (error) {
-      next(error);
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Error creating user" });
     }
   });
 
-  app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+  app.post("/api/login", (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate("local", (err: Error, user: SelectUser, info: { message: string }) => {
       if (err) {
         return next(err);
       }
       if (!user) {
-        return res.status(401).json({ message: "Invalid username or password" });
+        return res.status(401).json({ message: info.message || "Authentication failed" });
       }
-      req.login(user, (err) => {
-        if (err) {
-          return next(err);
+      req.login(user, (loginErr) => {
+        if (loginErr) {
+          return next(loginErr);
         }
-        return res.status(200).json(user);
+        const { password, ...userWithoutPassword } = user;
+        return res.json(userWithoutPassword);
       });
     })(req, res, next);
   });
 
-  app.post("/api/logout", (req, res, next) => {
+  app.post("/api/logout", (req: Request, res: Response) => {
     req.logout((err) => {
-      if (err) return next(err);
-      res.sendStatus(200);
+      if (err) {
+        return res.status(500).json({ message: "Error logging out" });
+      }
+      res.json({ message: "Logged out successfully" });
     });
   });
 
-  app.get("/api/user", (req, res) => {
+  app.get("/api/user", (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-    res.json(req.user);
+    const { password, ...userWithoutPassword } = req.user as SelectUser;
+    res.json(userWithoutPassword);
   });
-  
-  // API endpoints for user management (admin only)
-  app.get("/api/admin/users", isAdmin, async (req, res, next) => {
+
+  // Admin routes
+  app.get("/api/admin/users", isAdmin, async (_req: Request, res: Response) => {
     try {
       const users = await storage.getAllUsers();
-      // Don't send the password hash to the client
-      const usersWithoutPassword = users.map(({ password, ...user }) => user);
-      res.json(usersWithoutPassword);
+      const usersWithoutPasswords = users.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      res.json(usersWithoutPasswords);
     } catch (error) {
-      next(error);
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Error fetching users" });
     }
   });
-  
-  app.get("/api/admin/pending-users", isAdmin, async (req, res, next) => {
+
+  app.get("/api/admin/pending-users", isAdmin, async (_req: Request, res: Response) => {
     try {
-      const users = await storage.getPendingUsers();
-      // Don't send the password hash to the client
-      const usersWithoutPassword = users.map(({ password, ...user }) => user);
-      res.json(usersWithoutPassword);
+      const pendingUsers = await storage.getPendingUsers();
+      const usersWithoutPasswords = pendingUsers.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      res.json(usersWithoutPasswords);
     } catch (error) {
-      next(error);
+      console.error("Error fetching pending users:", error);
+      res.status(500).json({ message: "Error fetching pending users" });
     }
   });
-  
-  app.post("/api/admin/approve-user/:id", isAdmin, async (req, res, next) => {
+
+  app.post("/api/admin/approve-user/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: "Invalid user ID" });
-      }
-      
       const user = await storage.getUser(userId);
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       
       const updatedUser = await storage.updateUser(userId, {
-        isApproved: true,
-        status: 'approved'
+        status: "approved",
+        isApproved: true
       });
       
-      // Don't send the password hash to the client
-      const { password, ...userWithoutPassword } = updatedUser || {};
-      res.json(userWithoutPassword);
-    } catch (error) {
-      next(error);
-    }
-  });
-  
-  app.post("/api/admin/reject-user/:id", isAdmin, async (req, res, next) => {
-    try {
-      const userId = parseInt(req.params.id);
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: "Invalid user ID" });
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user" });
       }
       
+      const { password, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error approving user:", error);
+      res.status(500).json({ message: "Error approving user" });
+    }
+  });
+
+  app.post("/api/admin/reject-user/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       
       const updatedUser = await storage.updateUser(userId, {
-        isApproved: false,
-        status: 'rejected'
+        status: "rejected",
+        isApproved: false
       });
       
-      // Don't send the password hash to the client
-      const { password, ...userWithoutPassword } = updatedUser || {};
-      res.json(userWithoutPassword);
-    } catch (error) {
-      next(error);
-    }
-  });
-  
-  app.post("/api/admin/make-admin/:id", isAdmin, async (req, res, next) => {
-    try {
-      const userId = parseInt(req.params.id);
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: "Invalid user ID" });
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user" });
       }
       
+      const { password, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error rejecting user:", error);
+      res.status(500).json({ message: "Error rejecting user" });
+    }
+  });
+
+  app.post("/api/admin/make-admin/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       
       const updatedUser = await storage.updateUser(userId, {
-        role: 'admin'
+        role: "admin"
       });
       
-      // Don't send the password hash to the client
-      const { password, ...userWithoutPassword } = updatedUser || {};
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user" });
+      }
+      
+      const { password, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
     } catch (error) {
-      next(error);
+      console.error("Error making user admin:", error);
+      res.status(500).json({ message: "Error making user admin" });
     }
   });
-  
-  app.post("/api/admin/remove-admin/:id", isAdmin, async (req, res, next) => {
+
+  app.post("/api/admin/remove-admin/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: "Invalid user ID" });
-      }
-      
       const user = await storage.getUser(userId);
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
-      }
-      
-      // Prevent removing the last admin
-      const allUsers = await storage.getAllUsers();
-      const adminUsers = allUsers.filter(u => u.role === 'admin');
-      if (adminUsers.length <= 1 && user.role === 'admin') {
-        return res.status(400).json({ 
-          message: "Cannot remove the last admin user" 
-        });
       }
       
       const updatedUser = await storage.updateUser(userId, {
-        role: 'user'
+        role: "user"
       });
       
-      // Don't send the password hash to the client
-      const { password, ...userWithoutPassword } = updatedUser || {};
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user" });
+      }
+      
+      const { password, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
     } catch (error) {
-      next(error);
+      console.error("Error removing admin role:", error);
+      res.status(500).json({ message: "Error removing admin role" });
     }
   });
-  
-  app.delete("/api/admin/delete-user/:id", isAdmin, async (req, res, next) => {
+
+  app.delete("/api/admin/delete-user/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      if (isNaN(userId)) {
-        return res.status(400).json({ message: "Invalid user ID" });
-      }
-      
       const user = await storage.getUser(userId);
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
-      }
-      
-      // Prevent deleting the last admin
-      const allUsers = await storage.getAllUsers();
-      const adminUsers = allUsers.filter(u => u.role === 'admin');
-      if (adminUsers.length <= 1 && user.role === 'admin') {
-        return res.status(400).json({ 
-          message: "Cannot delete the last admin user" 
-        });
-      }
-      
-      // Check if the user is trying to delete themselves
-      if (req.user && req.user.id === userId) {
-        return res.status(400).json({ 
-          message: "Cannot delete your own account" 
-        });
       }
       
       const success = await storage.deleteUser(userId);
+      
       if (!success) {
         return res.status(500).json({ message: "Failed to delete user" });
       }
       
       res.json({ message: "User deleted successfully" });
     } catch (error) {
-      next(error);
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Error deleting user" });
     }
   });
+
+  // Middleware to check if user is admin
+  function isAdmin(req: Request, res: Response, next: NextFunction) {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    const user = req.user as SelectUser;
+    if (user.role !== "admin") {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+    
+    next();
+  }
+
+  // Set up default admin user if it doesn't exist
+  setupDefaultAdmin();
 }
 
-// Middleware to check if the user is an admin
-function isAdmin(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ message: "Not authenticated" });
-  }
-  
-  if (req.user && req.user.role === 'admin') {
-    return next();
-  }
-  
-  return res.status(403).json({ message: "Access denied" });
-}
-
-// Function to ensure there's at least one admin user in the system
 async function setupDefaultAdmin() {
   try {
-    const users = await storage.getAllUsers();
-    const adminUsers = users.filter(user => user.role === 'admin');
+    const adminUsername = "rdxhere.exe";
+    const adminPassword = "rdxpass";
     
-    if (adminUsers.length === 0) {
-      // Create the default admin user if none exists
-      const hashedPassword = await hashPassword('rdxpass');
+    const existingAdmin = await storage.getUserByUsername(adminUsername);
+    if (!existingAdmin) {
+      const hashedPassword = await hashPassword(adminPassword);
       await storage.createUser({
-        username: 'rdxhere.exe',
+        username: adminUsername,
         password: hashedPassword,
-        role: 'admin',
-        isApproved: true,
-        status: 'approved'
+        role: "admin",
+        status: "approved",
+        isApproved: true
       });
-      console.log('Created default admin user: rdxhere.exe');
+      console.log("Created default admin user:", adminUsername);
     }
   } catch (error) {
-    console.error('Error setting up default admin:', error);
+    console.error("Error setting up default admin:", error);
   }
 }
