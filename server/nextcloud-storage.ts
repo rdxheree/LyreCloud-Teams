@@ -1,8 +1,6 @@
 import { files, type File, type InsertFile, users, type User, type InsertUser } from "@shared/schema";
 import fs from "fs";
 import path from "path";
-import { promisify } from "util";
-import { nanoid } from "nanoid";
 import { createClient, WebDAVClient } from "webdav";
 import { Readable } from "stream";
 import { IStorage } from "./storage";
@@ -12,7 +10,7 @@ export class NextCloudStorage implements IStorage {
   private files: Map<number, File>;
   private userCurrentId: number;
   private fileCurrentId: number;
-  private client: WebDAVClient;
+  public client: WebDAVClient;
   private baseFolder: string;
   
   constructor() {
@@ -26,7 +24,7 @@ export class NextCloudStorage implements IStorage {
     const nextcloudUrl = process.env.NEXTCLOUD_URL;
     const username = process.env.NEXTCLOUD_USERNAME;
     const password = process.env.NEXTCLOUD_PASSWORD;
-    this.baseFolder = process.env.NEXTCLOUD_FOLDER || '/lyrecloud';
+    this.baseFolder = process.env.NEXTCLOUD_FOLDER || 'LyreTeams';
     
     if (!nextcloudUrl || !username || !password) {
       throw new Error('NextCloud credentials not provided. Please set NEXTCLOUD_URL, NEXTCLOUD_USERNAME, and NEXTCLOUD_PASSWORD environment variables.');
@@ -55,9 +53,6 @@ export class NextCloudStorage implements IStorage {
     });
     
     // This will be initialized asynchronously
-    
-    // We'll initialize the folder later in async operations
-    // No need to await here in constructor
     this.initializeStorage();
   }
   
@@ -65,7 +60,7 @@ export class NextCloudStorage implements IStorage {
   private async testConnection(): Promise<void> {
     try {
       // Try to get server capabilities by making a simple request
-      const response = await this.client.getDirectoryContents('/');
+      await this.client.getDirectoryContents('/');
       console.log('NextCloud connection test successful');
       console.log(`Found items in root directory`);
     } catch (error: any) {
@@ -88,6 +83,13 @@ export class NextCloudStorage implements IStorage {
       
       // Then try to ensure the base folder exists
       await this.ensureBaseFolder();
+      
+      // Load users from NextCloud
+      await this.loadUsersFromNextCloud();
+      
+      // Then scan for files in the cdns folder
+      await this.scanFilesFromNextCloud();
+      
       console.log('NextCloud storage initialization complete');
     } catch (error) {
       console.error('NextCloud storage initialization error:', error);
@@ -142,8 +144,86 @@ export class NextCloudStorage implements IStorage {
     // Store all files in cdns subfolder
     return `${this.baseFolder}/cdns/${filename}`;
   }
+
+  // Scan and load files from NextCloud
+  private async scanFilesFromNextCloud(): Promise<void> {
+    try {
+      const cdnsFolder = `${this.baseFolder}/cdns`;
+      const cdnsContent = await this.client.getDirectoryContents(cdnsFolder);
+      console.log(`Scanning NextCloud directory: ${cdnsFolder}`);
+      
+      // Convert to array if it's not already
+      const contentArray = Array.isArray(cdnsContent) ? cdnsContent : 'data' in cdnsContent ? cdnsContent.data : [];
+      
+      console.log(`Found ${contentArray.length} items in NextCloud cdns folder`);
+      
+      this.files.clear();
+      this.fileCurrentId = 1;
+      
+      // Add files to our in-memory storage
+      for (const item of contentArray) {
+        // Skip directories
+        if (item.type === 'directory') continue;
+        
+        const filename = path.basename(item.basename);
+        console.log(`Adding new file from NextCloud: ${filename}`);
+        
+        const now = new Date();
+        const mimeType = item.mime || this.getMimeTypeFromFilename(filename);
+        
+        // Create a file record
+        const newFile: File = {
+          id: this.fileCurrentId++,
+          filename: filename,
+          originalFilename: filename,
+          path: `${cdnsFolder}/${filename}`,
+          size: item.size || 0,
+          mimeType: mimeType,
+          uploadedAt: now,
+          isDeleted: false
+        };
+        
+        this.files.set(newFile.id, newFile);
+      }
+    } catch (error) {
+      console.error('Error scanning NextCloud files:', error);
+    }
+  }
   
-  // User methods (same as MemStorage since we keep users in memory)
+  // Helper method to guess MIME type from filename
+  private getMimeTypeFromFilename(filename: string): string {
+    const ext = path.extname(filename).toLowerCase();
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.gif':
+        return 'image/gif';
+      case '.pdf':
+        return 'application/pdf';
+      case '.txt':
+        return 'text/plain';
+      case '.doc':
+      case '.docx':
+        return 'application/msword';
+      case '.xls':
+      case '.xlsx':
+        return 'application/vnd.ms-excel';
+      case '.ppt':
+      case '.pptx':
+        return 'application/vnd.ms-powerpoint';
+      case '.mp3':
+        return 'audio/mpeg';
+      case '.mp4':
+        return 'video/mp4';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+  
+  // User methods
   async getUser(id: number): Promise<User | undefined> {
     return this.users.get(id);
   }
@@ -155,57 +235,44 @@ export class NextCloudStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    try {
-      const id = this.userCurrentId++;
-      const user: User = { 
-        ...insertUser, 
-        id,
-        role: insertUser.role || 'user',
-        isApproved: insertUser.isApproved !== undefined ? insertUser.isApproved : false,
-        status: insertUser.status || 'pending'
-      };
-      this.users.set(id, user);
-      
-      // Save users to a users.json file in NextCloud
-      await this.saveUsersToNextCloud();
-      
-      return user;
-    } catch (error) {
-      console.error('Error creating user:', error);
-      throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const id = this.userCurrentId++;
+    const user: User = { 
+      ...insertUser, 
+      id,
+      role: insertUser.role || 'user',
+      isApproved: insertUser.isApproved !== undefined ? insertUser.isApproved : false,
+      status: insertUser.status || 'pending'
+    };
+    this.users.set(id, user);
+    
+    // Save to NextCloud
+    await this.saveUsersToNextCloud();
+    
+    return user;
   }
   
   async updateUser(id: number, updateData: Partial<User>): Promise<User | undefined> {
-    try {
-      const user = this.users.get(id);
-      if (!user) return undefined;
-      
-      const updatedUser = { ...user, ...updateData };
-      this.users.set(id, updatedUser);
-      
-      // Save updated users to NextCloud
-      await this.saveUsersToNextCloud();
-      
-      return updatedUser;
-    } catch (error) {
-      console.error(`Error updating user ${id}:`, error);
-      throw new Error(`Failed to update user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, ...updateData };
+    this.users.set(id, updatedUser);
+    
+    // Save changes to NextCloud
+    await this.saveUsersToNextCloud();
+    
+    return updatedUser;
   }
   
   async deleteUser(id: number): Promise<boolean> {
-    try {
-      const result = this.users.delete(id);
-      if (result) {
-        // Save updated users to NextCloud
-        await this.saveUsersToNextCloud();
-      }
-      return result;
-    } catch (error) {
-      console.error(`Error deleting user ${id}:`, error);
-      throw new Error(`Failed to delete user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const result = this.users.delete(id);
+    
+    // Save changes to NextCloud
+    if (result) {
+      await this.saveUsersToNextCloud();
     }
+    
+    return result;
   }
   
   async getAllUsers(): Promise<User[]> {
@@ -216,177 +283,135 @@ export class NextCloudStorage implements IStorage {
     return Array.from(this.users.values()).filter(user => user.status === 'pending');
   }
   
+  // Save users to a users.json file in NextCloud
   private async saveUsersToNextCloud(): Promise<void> {
     try {
-      // Convert users Map to array for JSON serialization
+      // Convert users Map to array
       const usersArray = Array.from(this.users.values());
-      
-      // Create JSON string
+      // Convert to JSON string
       const usersJson = JSON.stringify(usersArray, null, 2);
+      // Path for users file in NextCloud
+      const usersFilePath = `${this.baseFolder}/users.json`;
       
-      // Save to users.json in the base folder
-      const usersJsonPath = `${this.baseFolder}/users.json`;
-      
-      await this.client.putFileContents(usersJsonPath, usersJson, {
+      // Save the file to NextCloud
+      await this.client.putFileContents(usersFilePath, usersJson, {
         overwrite: true
       });
       
       console.log('Users saved to NextCloud successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving users to NextCloud:', error);
-      throw new Error(`Failed to save users to NextCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   
+  // Load users from the users.json file in NextCloud
   private async loadUsersFromNextCloud(): Promise<void> {
     try {
-      const usersJsonPath = `${this.baseFolder}/users.json`;
+      // Path for users file in NextCloud
+      const usersFilePath = `${this.baseFolder}/users.json`;
       
-      // Check if users.json exists
-      const exists = await this.client.exists(usersJsonPath);
+      // Check if file exists
+      const exists = await this.client.exists(usersFilePath);
       if (!exists) {
-        console.log('No existing users.json found in NextCloud');
+        console.log('Users file does not exist in NextCloud yet. Creating default admin...');
         
-        // Create the admin user if no users.json exists
+        // Create default admin user
         const adminUser: User = {
           id: this.userCurrentId++,
           username: 'rdxhere.exe',
-          password: '$2b$10$zPRRMxwdA/5m1bRr3JFQ0OfCTBWzQHAK7D.PYoMDgE1mZTtQgCQZa', // hashed 'rdxpass'
+          password: 'rdxpass', // This will be hashed by auth.ts before saving
           role: 'admin',
-          isApproved: true,
-          status: 'approved'
+          status: 'approved',
+          isApproved: true
         };
         
         this.users.set(adminUser.id, adminUser);
+        
+        // Save to NextCloud
         await this.saveUsersToNextCloud();
         return;
       }
       
-      // Read users.json from NextCloud
-      const content = await this.client.getFileContents(usersJsonPath, { format: 'text' });
-      if (typeof content !== 'string') {
-        throw new Error('Unexpected response from NextCloud');
+      // Read file content
+      const fileContent = await this.client.getFileContents(usersFilePath, { format: 'text' });
+      
+      if (typeof fileContent !== 'string') {
+        throw new Error('Unexpected file content format');
       }
       
-      // Parse JSON and populate users Map
-      const usersArray = JSON.parse(content) as User[];
+      // Parse JSON
+      const usersArray = JSON.parse(fileContent) as User[];
       
-      // Clear existing users and load from file
+      // Find max ID to determine next ID
+      let maxId = 0;
+      
+      // Clear current users and rebuild from file
       this.users.clear();
       
-      let maxId = 0;
+      // Add users to Map
       for (const user of usersArray) {
         this.users.set(user.id, user);
-        if (user.id > maxId) maxId = user.id;
+        maxId = Math.max(maxId, user.id);
       }
       
-      // Update the user ID counter
+      // Update current ID
       this.userCurrentId = maxId + 1;
       
       console.log(`Loaded ${usersArray.length} users from NextCloud`);
-    } catch (error) {
-      console.error('Error loading users from NextCloud:', error);
       
-      // If there's an error, create the admin user as fallback
-      if (this.users.size === 0) {
-        console.log('Creating default admin user after load error');
+      // Check if admin exists, create one if not
+      const adminExists = Array.from(this.users.values()).some(u => u.role === 'admin');
+      if (!adminExists) {
+        console.log('No admin user found. Creating default admin...');
+        
+        // Create default admin user
         const adminUser: User = {
           id: this.userCurrentId++,
           username: 'rdxhere.exe',
-          password: '$2b$10$zPRRMxwdA/5m1bRr3JFQ0OfCTBWzQHAK7D.PYoMDgE1mZTtQgCQZa', // hashed 'rdxpass'
+          password: 'rdxpass', // This will be hashed by auth.ts before saving
           role: 'admin',
-          isApproved: true,
-          status: 'approved'
+          status: 'approved',
+          isApproved: true
         };
         
         this.users.set(adminUser.id, adminUser);
+        
+        // Save updated users to NextCloud
+        await this.saveUsersToNextCloud();
+      }
+    } catch (error: any) {
+      console.error('Error loading users from NextCloud:', error);
+      console.log('Initializing with empty users collection and default admin');
+      
+      // Clear current users
+      this.users.clear();
+      
+      // Create default admin user
+      const adminUser: User = {
+        id: this.userCurrentId++,
+        username: 'rdxhere.exe',
+        password: 'rdxpass', // This will be hashed by auth.ts before saving
+        role: 'admin',
+        status: 'approved',
+        isApproved: true
+      };
+      
+      this.users.set(adminUser.id, adminUser);
+      
+      // Try to save to NextCloud
+      try {
+        await this.saveUsersToNextCloud();
+      } catch (saveError) {
+        console.error('Failed to save initial users to NextCloud:', saveError);
       }
     }
   }
   
-  // File methods with improved synchronization
+  // File methods
   async getFiles(): Promise<File[]> {
-    try {
-      // Sync with NextCloud directory to find any new files
-      const cdnsPath = `${this.baseFolder}/cdns`;
-      console.log(`Scanning NextCloud directory: ${cdnsPath}`);
-      
-      const directoryContents = await this.client.getDirectoryContents(cdnsPath) as any[];
-      console.log(`Found ${directoryContents.length} items in NextCloud cdns folder`);
-      
-      // Map each file in NextCloud to our file structure and add if not already in our list
-      for (const item of directoryContents) {
-        if (item.type === 'file') {
-          // Check if we already have this file in our memory map by path
-          const existingFile = Array.from(this.files.values()).find(
-            file => file.path === item.filename
-          );
-          
-          if (!existingFile) {
-            // Parse the original filename from the stored path
-            const decodedName = decodeURIComponent(item.basename);
-            const fileId = this.fileCurrentId++;
-            
-            // Try to determine MIME type from file extension
-            const extension = decodedName.split('.').pop()?.toLowerCase() || '';
-            let mimeType = 'application/octet-stream'; // Default
-            
-            // Map common extensions to MIME types
-            const mimeTypesMap: Record<string, string> = {
-              'jpg': 'image/jpeg',
-              'jpeg': 'image/jpeg',
-              'png': 'image/png',
-              'gif': 'image/gif',
-              'webp': 'image/webp',
-              'pdf': 'application/pdf',
-              'mp4': 'video/mp4',
-              'mov': 'video/quicktime',
-              'mp3': 'audio/mpeg',
-              'wav': 'audio/wav',
-              'txt': 'text/plain',
-              'doc': 'application/msword',
-              'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              'xls': 'application/vnd.ms-excel',
-              'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-              'ppt': 'application/vnd.ms-powerpoint',
-              'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-              'zip': 'application/zip',
-              'rar': 'application/x-rar-compressed'
-            };
-            
-            if (extension in mimeTypesMap) {
-              mimeType = mimeTypesMap[extension];
-            }
-            
-            // Create a new file entry
-            const newFile: File = {
-              id: fileId,
-              filename: item.basename,
-              originalFilename: decodedName,
-              path: item.filename,
-              size: item.size,
-              mimeType: mimeType,
-              uploadedAt: item.lastmod ? new Date(item.lastmod) : new Date(),
-              isDeleted: false
-            };
-            
-            console.log(`Adding new file from NextCloud: ${decodedName}`);
-            this.files.set(fileId, newFile);
-          }
-        }
-      }
-      
-      // Return all valid files, sorted by upload date
-      return Array.from(this.files.values())
-        .filter(file => !file.isDeleted)
-        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    } catch (error) {
-      console.error('Error syncing files with NextCloud:', error);
-      // If error occurs, fall back to in-memory files
-      return Array.from(this.files.values())
-        .filter(file => !file.isDeleted)
-        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    }
+    return Array.from(this.files.values())
+      .filter(file => !file.isDeleted)
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
   }
 
   async getFile(id: number): Promise<File | undefined> {
