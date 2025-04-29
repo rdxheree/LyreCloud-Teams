@@ -220,35 +220,51 @@ export class NextCloudStorage implements IStorage {
   
   private async ensureBaseFolder(): Promise<void> {
     try {
-      // Try to get directory contents instead of checking existence
-      // This approach avoids the MKCOL method that might be causing 405 errors
+      // First ensure the main folder exists
       try {
         await this.client.getDirectoryContents(this.baseFolder);
         console.log(`Using existing folder: ${this.baseFolder} in NextCloud`);
       } catch (dirError) {
-        // If we can't access the directory, try to create it
         try {
           await this.client.createDirectory(this.baseFolder);
           console.log(`Created folder: ${this.baseFolder} in NextCloud`);
         } catch (createError: any) {
-          // If we get a 405 Method Not Allowed, the folder might exist but we don't have permission to create
           if (createError.status === 405) {
             console.warn(`Could not create folder ${this.baseFolder}, but proceeding anyway. The folder might already exist or you may need admin permissions.`);
           } else {
-            throw createError; // Re-throw for other errors
+            throw createError;
+          }
+        }
+      }
+      
+      // Then ensure the cdns subfolder exists
+      const cdnsFolder = `${this.baseFolder}/cdns`;
+      try {
+        await this.client.getDirectoryContents(cdnsFolder);
+        console.log(`Using existing folder: ${cdnsFolder} in NextCloud`);
+      } catch (dirError) {
+        try {
+          await this.client.createDirectory(cdnsFolder);
+          console.log(`Created folder: ${cdnsFolder} in NextCloud`);
+        } catch (createError: any) {
+          if (createError.status === 405) {
+            console.warn(`Could not create folder ${cdnsFolder}, but proceeding anyway. The folder might already exist or you may need admin permissions.`);
+          } else {
+            throw createError;
           }
         }
       }
     } catch (error: any) {
-      console.error('Error ensuring base folder exists:', error);
-      // Instead of throwing, log the error and continue - we'll try to use the folder anyway
+      console.error('Error ensuring folders exist:', error);
+      // Instead of throwing, log the error and continue
       console.warn('Will attempt to continue using NextCloud storage despite folder check failure.');
     }
   }
   
   // Helper method to generate the full path for a file in NextCloud
   private getFullPath(filename: string): string {
-    return `${this.baseFolder}/${filename}`;
+    // Store all files in cdns subfolder
+    return `${this.baseFolder}/cdns/${filename}`;
   }
   
   // User methods (same as MemStorage since we keep users in memory)
