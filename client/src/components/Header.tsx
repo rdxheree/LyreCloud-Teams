@@ -28,15 +28,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="py-4 px-4 md:px-10 flex items-center justify-between soft-element mb-4 md:mb-8">
-      <div className="flex items-center">
+    <header className="py-4 px-4 md:px-10 flex items-center justify-between soft-element mb-4 md:mb-8 overflow-hidden">
+      <div className="flex items-center overflow-hidden max-w-[60%]">
         {user && isMobile && (
-          <Button variant="ghost" size="icon" onClick={onMenuClick} className="mr-2">
+          <Button variant="ghost" size="icon" onClick={onMenuClick} className="mr-2 flex-shrink-0 p-1">
             <Menu className="h-5 w-5" />
           </Button>
         )}
-        <CloudIcon className="h-7 md:h-8 w-7 md:w-8 text-primary" />
-        <h1 className="ml-2 md:ml-3 text-lg md:text-2xl font-semibold text-primary-600">LyreCloud Teams</h1>
+        <CloudIcon className="h-7 md:h-8 w-7 md:w-8 text-primary flex-shrink-0" />
+        <h1 className="ml-2 md:ml-3 text-lg md:text-2xl font-semibold text-primary-600 truncate">LyreCloud Teams</h1>
       </div>
 
       {user && (
@@ -45,15 +45,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
           {isMobile && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>
+                <Button variant="ghost" size="icon" className="rounded-full ml-auto p-0">
+                  <Avatar className="h-7 w-7">
+                    <AvatarFallback className="text-sm">
                       {user.username.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-56 mr-2">
                 <DropdownMenuLabel>
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4" />
