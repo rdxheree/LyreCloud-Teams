@@ -5,131 +5,7 @@ import { promisify } from "util";
 import { nanoid } from "nanoid";
 import { createClient, WebDAVClient } from "webdav";
 import { Readable } from "stream";
-
-// modify the interface with any CRUD methods
-// you might need
-
-export interface IStorage {
-  // User operations
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  
-  // File operations
-  getFiles(): Promise<File[]>;
-  getFile(id: number): Promise<File | undefined>;
-  getFileByFilename(filename: string): Promise<File | undefined>;
-  createFile(file: InsertFile): Promise<File>;
-  deleteFile(id: number): Promise<boolean>;
-  
-  // Stream operations for file handling
-  createReadStream(filePath: string): Promise<fs.ReadStream | Readable>;
-  saveFileFromPath(localPath: string, filename: string): Promise<string>;
-}
-
-// Ensure uploads directory exists
-const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-try {
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  }
-} catch (error) {
-  console.error("Failed to create uploads directory:", error);
-}
-
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private files: Map<number, File>;
-  private userCurrentId: number;
-  private fileCurrentId: number;
-
-  constructor() {
-    this.users = new Map();
-    this.files = new Map();
-    this.userCurrentId = 1;
-    this.fileCurrentId = 1;
-  }
-
-  // User methods
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
-  }
-
-  // File methods
-  async getFiles(): Promise<File[]> {
-    return Array.from(this.files.values())
-      .filter(file => !file.isDeleted)
-      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-  }
-
-  async getFile(id: number): Promise<File | undefined> {
-    const file = this.files.get(id);
-    return file && !file.isDeleted ? file : undefined;
-  }
-
-  async getFileByFilename(filename: string): Promise<File | undefined> {
-    return Array.from(this.files.values()).find(
-      (file) => file.filename === filename && !file.isDeleted,
-    );
-  }
-
-  async createFile(insertFile: InsertFile): Promise<File> {
-    const id = this.fileCurrentId++;
-    const uploadedAt = new Date();
-    const file: File = { 
-      ...insertFile, 
-      id, 
-      uploadedAt, 
-      isDeleted: false 
-    };
-    this.files.set(id, file);
-    return file;
-  }
-
-  async deleteFile(id: number): Promise<boolean> {
-    const file = this.files.get(id);
-    if (!file) return false;
-
-    // Mark as deleted
-    const updatedFile = { ...file, isDeleted: true };
-    this.files.set(id, updatedFile);
-
-    // Optional: actually delete the file from the filesystem
-    try {
-      const filePath = file.path;
-      if (fs.existsSync(filePath)) {
-        await promisify(fs.unlink)(filePath);
-      }
-      return true;
-    } catch (error) {
-      console.error(`Error deleting file ${id}:`, error);
-      return false;
-    }
-  }
-  
-  // Stream operations
-  async createReadStream(filePath: string): Promise<fs.ReadStream> {
-    return fs.createReadStream(filePath);
-  }
-  
-  async saveFileFromPath(localPath: string, filename: string): Promise<string> {
-    // For local storage, we simply return the local path since it's already saved
-    return localPath;
-  }
-}
+import { IStorage } from "./storage";
 
 export class NextCloudStorage implements IStorage {
   private users: Map<number, User>;
@@ -285,11 +161,89 @@ export class NextCloudStorage implements IStorage {
     return user;
   }
   
-  // File methods
+  // File methods with improved synchronization
   async getFiles(): Promise<File[]> {
-    return Array.from(this.files.values())
-      .filter(file => !file.isDeleted)
-      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    try {
+      // Sync with NextCloud directory to find any new files
+      const cdnsPath = `${this.baseFolder}/cdns`;
+      console.log(`Scanning NextCloud directory: ${cdnsPath}`);
+      
+      const directoryContents = await this.client.getDirectoryContents(cdnsPath);
+      console.log(`Found ${directoryContents.length} items in NextCloud cdns folder`);
+      
+      // Map each file in NextCloud to our file structure and add if not already in our list
+      for (const item of directoryContents) {
+        if (item.type === 'file') {
+          // Check if we already have this file in our memory map by path
+          const existingFile = Array.from(this.files.values()).find(
+            file => file.path === item.filename
+          );
+          
+          if (!existingFile) {
+            // Parse the original filename from the stored path
+            const decodedName = decodeURIComponent(item.basename);
+            const fileId = this.fileCurrentId++;
+            
+            // Try to determine MIME type from file extension
+            const extension = decodedName.split('.').pop()?.toLowerCase() || '';
+            let mimeType = 'application/octet-stream'; // Default
+            
+            // Map common extensions to MIME types
+            const mimeTypesMap: Record<string, string> = {
+              'jpg': 'image/jpeg',
+              'jpeg': 'image/jpeg',
+              'png': 'image/png',
+              'gif': 'image/gif',
+              'webp': 'image/webp',
+              'pdf': 'application/pdf',
+              'mp4': 'video/mp4',
+              'mov': 'video/quicktime',
+              'mp3': 'audio/mpeg',
+              'wav': 'audio/wav',
+              'txt': 'text/plain',
+              'doc': 'application/msword',
+              'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'xls': 'application/vnd.ms-excel',
+              'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'ppt': 'application/vnd.ms-powerpoint',
+              'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              'zip': 'application/zip',
+              'rar': 'application/x-rar-compressed'
+            };
+            
+            if (extension in mimeTypesMap) {
+              mimeType = mimeTypesMap[extension];
+            }
+            
+            // Create a new file entry
+            const newFile: File = {
+              id: fileId,
+              filename: item.basename,
+              originalFilename: decodedName,
+              path: item.filename,
+              size: item.size,
+              mimeType: mimeType,
+              uploadedAt: item.lastmod ? new Date(item.lastmod) : new Date(),
+              isDeleted: false
+            };
+            
+            console.log(`Adding new file from NextCloud: ${decodedName}`);
+            this.files.set(fileId, newFile);
+          }
+        }
+      }
+      
+      // Return all valid files, sorted by upload date
+      return Array.from(this.files.values())
+        .filter(file => !file.isDeleted)
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    } catch (error) {
+      console.error('Error syncing files with NextCloud:', error);
+      // If error occurs, fall back to in-memory files
+      return Array.from(this.files.values())
+        .filter(file => !file.isDeleted)
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    }
   }
 
   async getFile(id: number): Promise<File | undefined> {
@@ -372,24 +326,3 @@ export class NextCloudStorage implements IStorage {
     }
   }
 }
-
-// Choose the appropriate storage implementation based on environment
-let storage: IStorage;
-
-if (process.env.NEXTCLOUD_URL && process.env.NEXTCLOUD_USERNAME && process.env.NEXTCLOUD_PASSWORD) {
-  console.log('Using NextCloud storage');
-  try {
-    // Use the enhanced NextCloudStorage implementation
-    const { NextCloudStorage } = require('./nextcloud-storage');
-    storage = new NextCloudStorage();
-  } catch (error) {
-    console.error('Failed to initialize NextCloud storage:', error);
-    console.log('Falling back to local storage');
-    storage = new MemStorage();
-  }
-} else {
-  console.log('Using local storage (NextCloud credentials not provided)');
-  storage = new MemStorage();
-}
-
-export { storage };
