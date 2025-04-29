@@ -107,26 +107,26 @@ export default function FileItem({ file }: FileItemProps) {
   };
 
   return (
-    <div className="soft-element p-4 rounded-xl">
-      <div className="flex flex-col md:flex-row">
+    <div className="soft-element p-4 rounded-xl w-full overflow-hidden">
+      <div className="flex flex-col md:flex-row w-full">
         {/* File Preview */}
         {renderPreview()}
         
-        <div className="flex flex-col md:flex-row flex-grow justify-between">
-          <div className="flex-grow mt-2 md:mt-0">
-            <h3 className="font-medium text-neutral-800 mb-1">
+        <div className="flex flex-col md:flex-row flex-grow justify-between w-full">
+          <div className="flex-grow mt-2 md:mt-0 overflow-hidden">
+            <h3 className="font-medium text-neutral-800 mb-1 truncate pr-2">
               {file.originalFilename}
             </h3>
             
-            <div className="flex text-sm text-neutral-500">
+            <div className="flex flex-wrap text-sm text-neutral-500">
               <span className="mr-4">{formatFileSize(file.size)}</span>
               <span>Uploaded {formatUploadDate(file.uploadedAt)}</span>
             </div>
             
             {/* For audio files, show the inline player */}
             {file.mimeType.startsWith('audio/') && (
-              <div className="mt-3 max-w-md">
-                <audio controls className="w-full h-8">
+              <div className="mt-3 max-w-full md:max-w-md overflow-hidden">
+                <audio controls className="w-full h-8 max-w-full">
                   <source src={previewUrl} type={file.mimeType} />
                   Your browser does not support the audio tag.
                 </audio>

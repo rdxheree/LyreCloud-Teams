@@ -14,7 +14,7 @@ function HomeContent() {
   
   return (
     <>
-      <section className="mb-10">
+      <section className="mb-10 w-full overflow-hidden">
         <h2 className="text-xl font-semibold mb-4 text-neutral-700">Upload Files</h2>
         <FileUpload />
         

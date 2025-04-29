@@ -83,11 +83,11 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
   };
   
   return (
-    <section>
-      <div className="flex justify-between items-center mb-4">
+    <section className="w-full overflow-hidden">
+      <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
         <h2 className="text-xl font-semibold text-neutral-700">Your Files</h2>
         
-        <div className="flex space-x-2">
+        <div className="flex space-x-2 flex-shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
