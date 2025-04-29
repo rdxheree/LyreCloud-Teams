@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Copy, Download, Trash2 } from "lucide-react";
+import { Copy, Download, Trash2, Expand, Minimize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { File } from "@shared/schema";
 import { useFileContext } from "@/contexts/FileContext";
 import { getFileTypeInfo, formatFileSize, formatUploadDate } from "@/lib/fileTypes";
@@ -14,7 +15,10 @@ interface FileItemProps {
 export default function FileItem({ file }: FileItemProps) {
   const { toast } = useToast();
   const { setSelectedFileId, setIsDeleteModalOpen } = useFileContext();
-  const { icon: FileTypeIcon, bgColor, iconColor } = getFileTypeInfo(file.mimeType);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const fileTypeInfo = getFileTypeInfo(file.mimeType);
+  const { icon: FileTypeIcon, bgColor, iconColor } = fileTypeInfo;
+  const isPreviewable = file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
 
   const handleCopyLink = () => {
     // Get the current domain
