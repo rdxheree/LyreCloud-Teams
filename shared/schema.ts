@@ -6,9 +6,20 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  role: text("role").notNull().default("user"),
+  isApproved: boolean("is_approved").notNull().default(false),
+  status: text("status").notNull().default("pending"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+  role: true,
+  isApproved: true,
+  status: true,
+});
+
+export const registrationRequestSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
 });

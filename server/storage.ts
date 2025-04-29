@@ -15,6 +15,10 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, updateData: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
+  getAllUsers(): Promise<User[]>;
+  getPendingUsers(): Promise<User[]>;
   
   // File operations
   getFiles(): Promise<File[]>;
@@ -64,9 +68,36 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id,
+      role: insertUser.role || 'user',
+      isApproved: insertUser.isApproved !== undefined ? insertUser.isApproved : false,
+      status: insertUser.status || 'pending'
+    };
     this.users.set(id, user);
     return user;
+  }
+  
+  async updateUser(id: number, updateData: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, ...updateData };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+  
+  async deleteUser(id: number): Promise<boolean> {
+    return this.users.delete(id);
+  }
+  
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+  
+  async getPendingUsers(): Promise<User[]> {
+    return Array.from(this.users.values()).filter(user => user.status === 'pending');
   }
 
   // File methods

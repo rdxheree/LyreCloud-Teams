@@ -155,10 +155,139 @@ export class NextCloudStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userCurrentId++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    try {
+      const id = this.userCurrentId++;
+      const user: User = { ...insertUser, id };
+      this.users.set(id, user);
+      
+      // Save users to a users.json file in NextCloud
+      await this.saveUsersToNextCloud();
+      
+      return user;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  async updateUser(id: number, updateData: Partial<User>): Promise<User | undefined> {
+    try {
+      const user = this.users.get(id);
+      if (!user) return undefined;
+      
+      const updatedUser = { ...user, ...updateData };
+      this.users.set(id, updatedUser);
+      
+      // Save updated users to NextCloud
+      await this.saveUsersToNextCloud();
+      
+      return updatedUser;
+    } catch (error) {
+      console.error(`Error updating user ${id}:`, error);
+      throw new Error(`Failed to update user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  async deleteUser(id: number): Promise<boolean> {
+    try {
+      const result = this.users.delete(id);
+      if (result) {
+        // Save updated users to NextCloud
+        await this.saveUsersToNextCloud();
+      }
+      return result;
+    } catch (error) {
+      console.error(`Error deleting user ${id}:`, error);
+      throw new Error(`Failed to delete user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  private async saveUsersToNextCloud(): Promise<void> {
+    try {
+      // Convert users Map to array for JSON serialization
+      const usersArray = Array.from(this.users.values());
+      
+      // Create JSON string
+      const usersJson = JSON.stringify(usersArray, null, 2);
+      
+      // Save to users.json in the base folder
+      const usersJsonPath = `${this.baseFolder}/users.json`;
+      
+      await this.client.putFileContents(usersJsonPath, usersJson, {
+        overwrite: true
+      });
+      
+      console.log('Users saved to NextCloud successfully');
+    } catch (error) {
+      console.error('Error saving users to NextCloud:', error);
+      throw new Error(`Failed to save users to NextCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  private async loadUsersFromNextCloud(): Promise<void> {
+    try {
+      const usersJsonPath = `${this.baseFolder}/users.json`;
+      
+      // Check if users.json exists
+      const exists = await this.client.exists(usersJsonPath);
+      if (!exists) {
+        console.log('No existing users.json found in NextCloud');
+        
+        // Create the admin user if no users.json exists
+        const adminUser: User = {
+          id: this.userCurrentId++,
+          username: 'rdxhere.exe',
+          password: '$2b$10$zPRRMxwdA/5m1bRr3JFQ0OfCTBWzQHAK7D.PYoMDgE1mZTtQgCQZa', // hashed 'rdxpass'
+          role: 'admin',
+          isApproved: true,
+          status: 'approved'
+        };
+        
+        this.users.set(adminUser.id, adminUser);
+        await this.saveUsersToNextCloud();
+        return;
+      }
+      
+      // Read users.json from NextCloud
+      const content = await this.client.getFileContents(usersJsonPath, { format: 'text' });
+      if (typeof content !== 'string') {
+        throw new Error('Unexpected response from NextCloud');
+      }
+      
+      // Parse JSON and populate users Map
+      const usersArray = JSON.parse(content) as User[];
+      
+      // Clear existing users and load from file
+      this.users.clear();
+      
+      let maxId = 0;
+      for (const user of usersArray) {
+        this.users.set(user.id, user);
+        if (user.id > maxId) maxId = user.id;
+      }
+      
+      // Update the user ID counter
+      this.userCurrentId = maxId + 1;
+      
+      console.log(`Loaded ${usersArray.length} users from NextCloud`);
+    } catch (error) {
+      console.error('Error loading users from NextCloud:', error);
+      
+      // If there's an error, create the admin user as fallback
+      if (this.users.size === 0) {
+        console.log('Creating default admin user after load error');
+        const adminUser: User = {
+          id: this.userCurrentId++,
+          username: 'rdxhere.exe',
+          password: '$2b$10$zPRRMxwdA/5m1bRr3JFQ0OfCTBWzQHAK7D.PYoMDgE1mZTtQgCQZa', // hashed 'rdxpass'
+          role: 'admin',
+          isApproved: true,
+          status: 'approved'
+        };
+        
+        this.users.set(adminUser.id, adminUser);
+      }
+    }
   }
   
   // File methods with improved synchronization
