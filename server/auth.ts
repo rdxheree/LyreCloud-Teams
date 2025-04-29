@@ -272,6 +272,11 @@ export function setupAuth(app: Express) {
         return res.status(404).json({ message: "User not found" });
       }
       
+      // Check if it's the permanent admin account (rdxhere.exe)
+      if (user.username === "rdxhere.exe") {
+        return res.status(403).json({ message: "Cannot remove admin role from the permanent administrator" });
+      }
+      
       const updatedUser = await storage.updateUser(userId, {
         role: "user"
       });
@@ -295,6 +300,11 @@ export function setupAuth(app: Express) {
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if it's the permanent admin account (rdxhere.exe)
+      if (user.username === "rdxhere.exe") {
+        return res.status(403).json({ message: "Cannot delete the permanent administrator account" });
       }
       
       const success = await storage.deleteUser(userId);
@@ -335,6 +345,7 @@ async function setupDefaultAdmin() {
     
     const existingAdmin = await storage.getUserByUsername(adminUsername);
     if (!existingAdmin) {
+      // Create the admin user if it doesn't exist
       const hashedPassword = await hashPassword(adminPassword);
       await storage.createUser({
         username: adminUsername,
@@ -344,6 +355,14 @@ async function setupDefaultAdmin() {
         isApproved: true
       });
       console.log("Created default admin user:", adminUsername);
+    } else if (existingAdmin.role !== "admin") {
+      // Ensure the user has admin role if it exists but isn't an admin
+      await storage.updateUser(existingAdmin.id, {
+        role: "admin",
+        status: "approved",
+        isApproved: true
+      });
+      console.log("Restored admin privileges to", adminUsername);
     }
   } catch (error) {
     console.error("Error setting up default admin:", error);
