@@ -7,6 +7,7 @@ import FilesList from "@/components/FilesList";
 import DeleteConfirmationModal from "@/components/DeleteConfirmationModal";
 import { useFileContext } from "@/contexts/FileContext";
 import { useGetFiles } from "@/hooks/useFiles";
+import { File as SchemaFile } from "@shared/schema";
 
 function HomeContent() {
   const { currentProgress, isDeleteModalOpen } = useFileContext();

@@ -295,9 +295,9 @@ export class NextCloudStorage implements IStorage {
       // Map each file in NextCloud to our file structure and add if not already in our list
       for (const item of directoryContents) {
         if (item.type === 'file') {
-          // Check if we already have this file in our memory map by path
+          // Check if we already have this file in our memory map by path or filename
           const existingFile = Array.from(this.files.values()).find(
-            file => file.path === item.filename
+            file => file.path === item.filename || file.filename === item.basename
           );
           
           if (!existingFile) {

@@ -2,10 +2,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { File } from "@shared/schema";
+import { File as SchemaFile } from "@shared/schema";
 
 export function useGetFiles() {
-  return useQuery<File[]>({
+  return useQuery<SchemaFile[]>({
     queryKey: ["/api/files"],
   });
 }
@@ -18,7 +18,7 @@ export function useUploadFile() {
       file,
       onProgress,
     }: {
-      file: File;
+      file: globalThis.File; // Browser's File API
       onProgress?: (progress: number, uploadedBytes: number) => void;
     }) => {
       const formData = new FormData();
@@ -37,7 +37,7 @@ export function useUploadFile() {
       }
 
       // Return a promise that resolves/rejects based on the XHR request
-      return new Promise<File>((resolve, reject) => {
+      return new Promise<SchemaFile>((resolve, reject) => {
         xhr.open("POST", "/api/files/upload");
         
         xhr.onload = function() {
