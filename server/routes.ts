@@ -24,7 +24,15 @@ const storage_config = multer.diskStorage({
     cb(null, UPLOADS_DIR);
   },
   filename: (_req, file, cb) => {
-    const uniqueFilename = `${nanoid()}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    // Only add unique ID if filename already exists
+    let finalFilename = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    
+    // Let's store the clean name for saving to NextCloud without the unique ID
+    // We'll handle collisions via overwrite in the storage class
+    file.cleanname = finalFilename;
+    
+    // For local temporary files we still need a unique name to avoid collisions
+    const uniqueFilename = `${nanoid()}-${finalFilename}`;
     cb(null, uniqueFilename);
   },
 });
@@ -81,7 +89,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Save to permanent storage (NextCloud if configured, local otherwise)
-      const path = await storage.saveFileFromPath(req.file.path, req.file.filename);
+      // Use cleanname for NextCloud to avoid prefixed IDs, or fall back to filename
+      const path = await storage.saveFileFromPath(req.file.path, (req.file as any).cleanname || req.file.filename);
       
       const fileData = {
         filename: req.file.filename,
