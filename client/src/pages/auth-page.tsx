@@ -76,9 +76,14 @@ export default function AuthPage() {
         {/* Form section */}
         <div className="w-full lg:w-1/2 p-8">
           <div className="mx-auto max-w-md space-y-6">
-            <div className="space-y-2 text-center">
-              <h1 className="text-3xl font-bold">LyreCloud</h1>
-              <p className="text-gray-500">Sign in to your account or register</p>
+            <div className="space-y-4 text-center">
+              <div className="flex justify-center">
+                <img src="/cdn/500-500-max.webp" alt="LyreCloud Logo" className="h-16 w-auto" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold">LyreCloud</h1>
+                <p className="text-gray-500">Sign in to your account or register</p>
+              </div>
             </div>
 
             <Tabs
@@ -241,82 +246,15 @@ export default function AuthPage() {
         {/* Hero section */}
         <div className="hidden lg:block lg:w-1/2 bg-blue-600 p-12 text-white">
           <div className="flex h-full flex-col justify-center space-y-8">
-            <div className="space-y-4">
-              <h2 className="text-4xl font-bold">LyreCloud File Management</h2>
+            <div className="flex justify-center items-center p-8">
+              <img src="/cdn/500-500-max.webp" alt="LyreCloud Logo" className="w-48 h-auto" />
+            </div>
+            <div className="space-y-4 text-center">
+              <h2 className="text-4xl font-bold">LyreCloud Teams</h2>
               <p className="text-xl">
-                Your secure cloud storage solution for all your files. Upload, manage, and share with ease.
+                Enterprise file management and collaboration platform
               </p>
             </div>
-            <ul className="space-y-3 text-lg">
-              <li className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Secure file storage with NextCloud integration
-              </li>
-              <li className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                File preview and management capabilities
-              </li>
-              <li className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                1GB upload limit per file
-              </li>
-              <li className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                User management with role-based permissions
-              </li>
-            </ul>
           </div>
         </div>
       </div>
