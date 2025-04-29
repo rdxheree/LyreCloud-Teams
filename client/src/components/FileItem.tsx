@@ -20,9 +20,10 @@ export default function FileItem({ file }: FileItemProps) {
   const isPreviewable = file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
 
   const handleCopyLink = () => {
-    // Get the current domain
-    const domain = window.location.origin;
-    const fileLink = `${domain}/api/files/${file.id}/download`;
+    // Create the CDN link in the format: https://teams.lyrecloud.com/cdn/<filename>
+    // Use current domain as fallback for development
+    const cdnUrl = 'https://teams.lyrecloud.com';
+    const fileLink = `${cdnUrl}/cdn/${file.filename}`;
     
     navigator.clipboard.writeText(fileLink)
       .then(() => {
