@@ -5,10 +5,10 @@ import FileUpload from "@/components/FileUpload";
 import UploadProgress from "@/components/UploadProgress";
 import FilesList from "@/components/FilesList";
 import DeleteConfirmationModal from "@/components/DeleteConfirmationModal";
-import { useFileContext } from "@/contexts/FileContext";
+import { FileProvider, useFileContext } from "@/contexts/FileContext";
 import { useGetFiles } from "@/hooks/useFiles";
 
-export default function Home() {
+function HomeContent() {
   const { currentProgress, isDeleteModalOpen } = useFileContext();
   const { data: files, isLoading, error } = useGetFiles();
   
@@ -40,5 +40,13 @@ export default function Home() {
       
       {isDeleteModalOpen && <DeleteConfirmationModal />}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <FileProvider>
+      <HomeContent />
+    </FileProvider>
   );
 }

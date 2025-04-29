@@ -6,12 +6,12 @@ export default function Header() {
     <header className="py-4 px-6 md:px-10 flex items-center justify-between soft-element mb-8">
       <div className="flex items-center">
         <CloudIcon className="h-8 w-8 text-primary" />
-        <h1 className="ml-3 text-2xl font-semibold text-primary-600">FileShare</h1>
+        <h1 className="ml-3 text-2xl font-semibold text-primary-600">LyreCloud Teams</h1>
       </div>
       
       <div className="flex space-x-2">
         <Button 
-          variant="soft" 
+          variant="outline" 
           className="soft-button bg-background px-4 py-2 rounded-full text-primary font-medium"
         >
           Sign In
