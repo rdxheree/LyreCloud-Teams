@@ -284,7 +284,10 @@ export default function UserManagementPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    users.map((user) => (
+                    // Only show approved users in the Users list
+                    users
+                      .filter(user => user.isApproved)
+                      .map((user) => (
                       <TableRow key={user.id}>
                         <TableCell>{user.id}</TableCell>
                         <TableCell className="font-medium">
@@ -294,7 +297,8 @@ export default function UserManagementPage() {
                         <TableCell>{renderUserStatusBadge(user.status)}</TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
-                            {user.role === "admin" ? (
+                            {/* Don't show Remove Admin button for rdxhere.exe */}
+                            {user.role === "admin" && user.username !== "rdxhere.exe" ? (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -303,7 +307,7 @@ export default function UserManagementPage() {
                               >
                                 Remove Admin
                               </Button>
-                            ) : (
+                            ) : user.role !== "admin" ? (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -312,16 +316,20 @@ export default function UserManagementPage() {
                               >
                                 Make Admin
                               </Button>
+                            ) : null}
+                            
+                            {/* Don't show Delete button for rdxhere.exe */}
+                            {user.username !== "rdxhere.exe" && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user.id)}
+                                disabled={deleteUserMutation.isPending}
+                              >
+                                <UserMinus className="h-4 w-4 mr-1" />
+                                Delete
+                              </Button>
                             )}
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.id)}
-                              disabled={deleteUserMutation.isPending}
-                            >
-                              <UserMinus className="h-4 w-4 mr-1" />
-                              Delete
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
