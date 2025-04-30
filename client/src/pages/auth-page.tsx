@@ -78,7 +78,7 @@ export default function AuthPage() {
           <div className="mx-auto max-w-md space-y-6">
             <div className="space-y-4 text-center">
               <div className="flex justify-center">
-                <img src="/cdn/500-500-max.webp" alt="LyreCloud Logo" className="h-16 w-auto" />
+                <img src="https://teams.lyrecloud.com/cdn/Lyrecloud.webp" alt="LyreCloud Logo" className="h-16 w-auto" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold">LyreCloud</h1>
@@ -247,7 +247,7 @@ export default function AuthPage() {
         <div className="hidden lg:block lg:w-1/2 bg-blue-600 p-12 text-white">
           <div className="flex h-full flex-col justify-center space-y-8">
             <div className="flex justify-center items-center p-8">
-              <img src="/cdn/500-500-max.webp" alt="LyreCloud Logo" className="w-48 h-auto" />
+              <img src="https://teams.lyrecloud.com/cdn/Lyrecloud.webp" alt="LyreCloud Logo" className="w-48 h-auto" />
             </div>
             <div className="space-y-4 text-center">
               <h2 className="text-4xl font-bold">LyreCloud Teams</h2>
