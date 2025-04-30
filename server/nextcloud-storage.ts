@@ -489,9 +489,9 @@ export class NextCloudStorage implements IStorage {
         
         // Check if admin exists, create one if not
         const adminUser = Array.from(this.users.values()).find(u => u.username === 'rdxhere.exe');
-        const adminExists = adminUser && adminUser.role === 'admin';
-        if (!adminExists) {
-          console.log('No admin user found or admin privileges missing. Restoring default admin...');
+        
+        if (!adminUser) {
+          console.log('No admin user found. Restoring default admin...');
           
           // Create default admin user
           // Note: We're not hashing this password here because it should be hashed by auth.ts setupDefaultAdmin
@@ -509,11 +509,16 @@ export class NextCloudStorage implements IStorage {
           // Save updated users to NextCloud
           await this.saveUsersToNextCloud();
           console.log('Restored default admin user: rdxhere.exe');
-        } else if (adminUser && adminUser.role !== 'admin') {
-          // Fix role if it's wrong
+        } else if (adminUser.role !== 'admin') {
+          // Always fix admin role to ensure it's correct
+          console.log(`Found admin user with incorrect role: "${adminUser.role}". Fixing to "admin"`);
           adminUser.role = 'admin';
-          console.log(`Fixed admin role for ${adminUser.username}`);
+          
+          // Save the fix immediately
           await this.saveUsersToNextCloud();
+          console.log(`Fixed admin role for ${adminUser.username}`);
+        } else {
+          console.log(`Admin user verified with correct role: ${adminUser.role}`);
         }
       } catch (parseError: any) {
         console.error('Error parsing users JSON from NextCloud:', parseError);
