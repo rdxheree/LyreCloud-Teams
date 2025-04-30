@@ -707,15 +707,48 @@ export class NextCloudStorage implements IStorage {
     const file = this.files.get(id);
     if (!file || file.isDeleted) return undefined;
 
-    // Prevent changing critical properties
-    const safeUpdateData = { ...updateData };
-    delete safeUpdateData.id;
-    delete safeUpdateData.filename;
-    delete safeUpdateData.path;
-    delete safeUpdateData.isDeleted;
+    // Special handling for rename operation (originalFilename change)
+    if (updateData.originalFilename && updateData.originalFilename !== file.originalFilename) {
+      try {
+        console.log(`Renaming file in NextCloud from "${file.filename}" to "${updateData.originalFilename}"`);
+        
+        // Get file extension from the original filename
+        const fileExt = path.extname(file.filename);
+        
+        // Create new filename with the provided name but keep the original extension
+        const newFilename = updateData.originalFilename + fileExt;
+        
+        // Create paths for source and destination
+        const sourcePath = file.path;
+        const destFolder = path.dirname(file.path);
+        const destPath = `${destFolder}/${newFilename}`;
+        
+        // Check if source file exists
+        const exists = await this.client.exists(sourcePath);
+        if (!exists) {
+          console.error(`Source file does not exist in NextCloud: ${sourcePath}`);
+          throw new Error('Source file not found in NextCloud');
+        }
+        
+        // Copy the file to the new name
+        await this.client.copyFile(sourcePath, destPath);
+        
+        // Delete the old file
+        await this.client.deleteFile(sourcePath);
+        
+        // Update metadata with new filename and path
+        updateData.filename = newFilename;
+        updateData.path = destPath;
+        
+        console.log(`Successfully renamed file in NextCloud to: ${newFilename}`);
+      } catch (error) {
+        console.error('Error renaming file in NextCloud:', error);
+        throw new Error(`Failed to rename file in NextCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
 
     // Update the file metadata
-    const updatedFile = { ...file, ...safeUpdateData };
+    const updatedFile = { ...file, ...updateData };
     this.files.set(id, updatedFile);
     return updatedFile;
   }
