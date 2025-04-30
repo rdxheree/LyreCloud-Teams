@@ -71,9 +71,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             
             {user && user.role === "admin" && (
               <li>
-                <Link href="/admin/user-management">
+                <Link href="/users">
                   <button 
-                    className={location === "/admin/user-management" ? activeLinkClass : linkClass}
+                    className={location === "/users" ? activeLinkClass : linkClass}
                     onClick={isMobile ? onClose : undefined}
                   >
                     <UserCog className="h-5 w-5" />
