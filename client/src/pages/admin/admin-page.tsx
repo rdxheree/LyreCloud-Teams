@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import WebhookSettings from "@/components/WebhookSettings";
+import KeepAliveSettings from "@/components/KeepAliveSettings";
 import {
   Table,
   TableBody,
@@ -612,6 +613,9 @@ function AdminContent() {
 
             {/* Logs Tab Content */}
             <TabsContent value="logs" className="mt-6">
+              {/* Keep-Alive Service Settings */}
+              <KeepAliveSettings />
+              
               {/* Discord Webhook Settings */}
               <WebhookSettings />
               
