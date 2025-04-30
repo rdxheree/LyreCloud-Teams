@@ -226,7 +226,8 @@ export class NextCloudStorage implements IStorage {
           size: item.size || 0,
           mimeType: mimeType,
           uploadedAt: now,
-          isDeleted: false
+          isDeleted: false,
+          uploadedBy: "system"
         };
         
         this.files.set(newFile.id, newFile);

@@ -125,7 +125,8 @@ export class MemStorage implements IStorage {
       ...insertFile, 
       id, 
       uploadedAt, 
-      isDeleted: false 
+      isDeleted: false,
+      uploadedBy: insertFile.uploadedBy || "unknown"
     };
     this.files.set(id, file);
     return file;

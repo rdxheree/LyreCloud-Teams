@@ -96,6 +96,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No file uploaded' });
       }
 
+      // Get the authenticated user if available
+      let uploadedBy = "unknown";
+      if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+        uploadedBy = (req.user as any).username || "unknown";
+      }
+
       // Save to permanent storage (NextCloud if configured, local otherwise)
       // Use cleanname for NextCloud to avoid prefixed IDs, or fall back to filename
       const path = await storage.saveFileFromPath(req.file.path, (req.file as ExtendedFile).cleanname || req.file.filename);
@@ -106,6 +112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         size: req.file.size,
         mimeType: req.file.mimetype,
         path: path, // This is either the local path or NextCloud path
+        uploadedBy: uploadedBy, // Add the authenticated username
       };
 
       // Validate with zod schema

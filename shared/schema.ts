@@ -33,6 +33,7 @@ export const files = pgTable("files", {
   path: text("path").notNull(),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
   isDeleted: boolean("is_deleted").default(false).notNull(),
+  uploadedBy: text("uploaded_by").default("unknown").notNull(),
 });
 
 export const insertFileSchema = createInsertSchema(files).omit({
