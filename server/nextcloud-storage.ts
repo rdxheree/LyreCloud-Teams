@@ -286,6 +286,16 @@ export class NextCloudStorage implements IStorage {
         if (item.type === 'directory') continue;
         
         const filename = path.basename(item.basename);
+        
+        // Skip metadata JSON files and any files that start with files.json or users.json
+        if (filename.endsWith('.json') || 
+            filename === 'files.json' || 
+            filename === 'users.json' ||
+            filename.includes('-users.json')) {
+          console.log(`Skipping metadata file: ${filename}`);
+          continue;
+        }
+        
         console.log(`Adding new file from NextCloud: ${filename}`);
         
         const now = new Date();
