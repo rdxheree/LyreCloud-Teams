@@ -624,8 +624,8 @@ function AdminContent() {
                   {/* Filter and refresh */}
                   <div className="flex space-x-2 w-full md:w-1/3 justify-end">
                     <Select
-                      value={logType || ""}
-                      onValueChange={(value) => setLogType(value === "" ? undefined : value)}
+                      value={logType || "all_types"}
+                      onValueChange={(value) => setLogType(value === "all_types" ? undefined : value)}
                     >
                       <SelectTrigger className="w-40 md:w-48">
                         <div className="flex items-center">
@@ -634,7 +634,7 @@ function AdminContent() {
                         </div>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Types</SelectItem>
+                        <SelectItem value="all_types">All Types</SelectItem>
                         <SelectItem value="USER_REGISTER">Registration</SelectItem>
                         <SelectItem value="USER_LOGIN">Login</SelectItem>
                         <SelectItem value="USER_LOGOUT">Logout</SelectItem>
