@@ -612,6 +612,9 @@ function AdminContent() {
 
             {/* Logs Tab Content */}
             <TabsContent value="logs" className="mt-6">
+              {/* Discord Webhook Settings */}
+              <WebhookSettings />
+              
               <div className="flex flex-col space-y-4 mb-4">
                 <div className="flex flex-col md:flex-row justify-between space-y-4 md:space-y-0 md:space-x-4">
                   {/* Search bar */}

@@ -19,6 +19,12 @@ interface WebhookConfig {
   lastFailureReason?: string;
 }
 
+interface WebhookResponse {
+  success: boolean;
+  message?: string;
+  config?: WebhookConfig;
+}
+
 export default function WebhookSettings() {
   const { toast } = useToast();
   const [url, setUrl] = useState("");
@@ -26,15 +32,15 @@ export default function WebhookSettings() {
   const [hasChanges, setHasChanges] = useState(false);
 
   // Fetch webhook configuration
-  const { data: config, isLoading: isLoadingConfig } = useQuery<WebhookConfig>({
+  const { data: webhookData, isLoading: isLoadingConfig } = useQuery<WebhookConfig>({
     queryKey: ["/api/webhook"],
     queryFn: async () => {
       try {
-        const response = await apiRequest({
+        const response = await apiRequest<WebhookConfig>({
           method: "GET",
           url: "/api/webhook"
         });
-        return response;
+        return response || { url: "", enabled: false };
       } catch (error) {
         // If endpoint doesn't exist or returns error, use default config
         return { url: "", enabled: false };
@@ -44,17 +50,17 @@ export default function WebhookSettings() {
 
   // Update local state when config is loaded
   useEffect(() => {
-    if (config) {
-      setUrl(config.url || "");
-      setEnabled(config.enabled || false);
+    if (webhookData) {
+      setUrl(webhookData.url || "");
+      setEnabled(webhookData.enabled || false);
       setHasChanges(false);
     }
-  }, [config]);
+  }, [webhookData]);
 
   // Test webhook connection
   const testWebhookMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest<{ success: boolean; message: string }>({
+      return await apiRequest<WebhookResponse>({
         method: "POST",
         url: "/api/webhook/test"
       });
@@ -86,10 +92,10 @@ export default function WebhookSettings() {
   // Save webhook configuration
   const saveWebhookMutation = useMutation({
     mutationFn: async (config: Partial<WebhookConfig>) => {
-      return await apiRequest<{ success: boolean; config: WebhookConfig }>({
+      return await apiRequest<WebhookResponse>({
         method: "POST",
         url: "/api/webhook",
-        body: config
+        data: config // Use data instead of body
       });
     },
     onSuccess: () => {
@@ -226,31 +232,31 @@ export default function WebhookSettings() {
             </div>
             
             {/* Status information */}
-            {config && (
+            {webhookData && (
               <div className="space-y-3 pt-2">
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-medium">Last Tested:</span> {formatDate(config.lastTestedAt)}
+                  <span className="font-medium">Last Tested:</span> {formatDate(webhookData.lastTestedAt)}
                 </div>
                 
-                {config.lastSuccessAt && (
+                {webhookData.lastSuccessAt && (
                   <Alert className="bg-green-50 border-green-200">
                     <Check className="h-4 w-4 text-green-600" />
                     <AlertTitle className="text-green-600">Last Successful Connection</AlertTitle>
                     <AlertDescription className="text-green-700">
-                      {formatDate(config.lastSuccessAt)}
+                      {formatDate(webhookData.lastSuccessAt)}
                     </AlertDescription>
                   </Alert>
                 )}
                 
-                {config.lastFailureAt && (
+                {webhookData.lastFailureAt && (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Last Failed Connection</AlertTitle>
                     <AlertDescription>
-                      {formatDate(config.lastFailureAt)}
-                      {config.lastFailureReason && (
+                      {formatDate(webhookData.lastFailureAt)}
+                      {webhookData.lastFailureReason && (
                         <div className="mt-1 text-sm">
-                          Reason: {config.lastFailureReason}
+                          Reason: {webhookData.lastFailureReason}
                         </div>
                       )}
                     </AlertDescription>
