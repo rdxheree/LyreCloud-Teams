@@ -359,8 +359,11 @@ async function setupDefaultAdmin() {
       // Check if the password is already hashed
       const passwordIsHashed = existingAdmin.password.includes('.');
       
+      // Check if there's a role typo (like "adminn" instead of "admin")
+      const roleNeedsUpdate = existingAdmin.role !== "admin";
+      
       let updates: Partial<SelectUser> = {
-        role: "admin",
+        role: "admin", // Always ensure the role is exactly "admin"
         status: "approved",
         isApproved: true
       };
@@ -369,6 +372,10 @@ async function setupDefaultAdmin() {
       if (!passwordIsHashed) {
         updates.password = await hashPassword(adminPassword);
         console.log("Updating admin password with hashed version");
+      }
+      
+      if (roleNeedsUpdate) {
+        console.log(`Fixing admin role from "${existingAdmin.role}" to "admin"`);
       }
       
       // Ensure the user has admin role and proper password

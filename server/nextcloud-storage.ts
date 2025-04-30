@@ -296,6 +296,9 @@ export class NextCloudStorage implements IStorage {
       // Convert users Map to array
       const usersArray = Array.from(this.users.values());
       
+      // Log the number of users being saved
+      console.log(`Saving ${usersArray.length} users to NextCloud: ${usersArray.map(u => u.username).join(', ')}`);
+      
       // Convert to JSON string
       const usersJson = JSON.stringify(usersArray, null, 2);
       
@@ -311,6 +314,17 @@ export class NextCloudStorage implements IStorage {
       });
       
       console.log('Users saved to NextCloud successfully');
+      
+      // Verify the save by immediately reading back the file
+      try {
+        const content = await this.client.getFileContents(usersFilePath, { format: 'text' });
+        if (typeof content === 'string') {
+          const savedUsers = JSON.parse(content);
+          console.log(`Verified saved users: found ${savedUsers.length} users in NextCloud storage`);
+        }
+      } catch (verifyError) {
+        console.warn('Could not verify saved users file:', verifyError);
+      }
     } catch (error: any) {
       console.error(`Error saving users to NextCloud (attempt ${retryCount + 1}/${maxRetries + 1}):`, error);
       
@@ -402,7 +416,8 @@ export class NextCloudStorage implements IStorage {
         console.log(`Loaded ${usersArray.length} users from NextCloud`);
         
         // Check if admin exists, create one if not
-        const adminExists = Array.from(this.users.values()).some(u => u.username === 'rdxhere.exe' && u.role === 'admin');
+        const adminUser = Array.from(this.users.values()).find(u => u.username === 'rdxhere.exe');
+        const adminExists = adminUser && adminUser.role === 'admin';
         if (!adminExists) {
           console.log('No admin user found or admin privileges missing. Restoring default admin...');
           
