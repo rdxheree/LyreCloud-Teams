@@ -42,7 +42,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         <div className="p-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <CloudIcon className="h-6 w-6 text-primary" />
+            <img src="https://teams.lyrecloud.com/cdn/Lyrecloud.webp" alt="LyreCloud Logo" className="h-6 w-6 object-contain" />
             <h1 className="text-xl font-semibold text-primary-600">LyreCloud</h1>
           </div>
           {isMobile && (
