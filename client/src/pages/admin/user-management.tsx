@@ -65,14 +65,14 @@ function UserManagementContent() {
 
   // Fetch all users
   const { data: users = [], isLoading: isLoadingUsers } = useQuery<User[]>({
-    queryKey: ["/api/admin/users"],
+    queryKey: ["/api/users"],
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!user && user.role === "admin",
   });
 
   // Fetch pending users
   const { data: pendingUsers = [], isLoading: isLoadingPendingUsers } = useQuery<User[]>({
-    queryKey: ["/api/admin/pending-users"],
+    queryKey: ["/api/users/pending"],
     queryFn: getQueryFn({ on401: "throw" }),
     enabled: !!user && user.role === "admin",
   });
@@ -80,12 +80,12 @@ function UserManagementContent() {
   // Approve user mutation
   const approveUserMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/admin/approve-user/${userId}`);
+      const res = await apiRequest("POST", `/api/users/approve/${userId}`);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/pending-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/pending"] });
       toast({
         title: "User Approved",
         description: "User has been approved successfully",
@@ -103,12 +103,12 @@ function UserManagementContent() {
   // Reject user mutation
   const rejectUserMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/admin/reject-user/${userId}`);
+      const res = await apiRequest("POST", `/api/users/reject/${userId}`);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/pending-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/pending"] });
       toast({
         title: "User Rejected",
         description: "User has been rejected",

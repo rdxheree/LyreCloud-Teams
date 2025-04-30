@@ -678,7 +678,9 @@ export class NextCloudStorage implements IStorage {
       uploadedAt, 
       isDeleted: false,
       // Override path to include the virtual NextCloud path
-      path: this.getFullPath(insertFile.filename)
+      path: this.getFullPath(insertFile.filename),
+      // Ensure uploadedBy is set
+      uploadedBy: insertFile.uploadedBy || "unknown"
     };
     
     this.files.set(id, file);

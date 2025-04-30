@@ -120,7 +120,8 @@ export default function FileItem({ file }: FileItemProps) {
             
             <div className="flex flex-wrap text-sm text-neutral-500">
               <span className="mr-4">{formatFileSize(file.size)}</span>
-              <span>Uploaded {formatUploadDate(file.uploadedAt)}</span>
+              <span className="mr-4">Uploaded on {formatUploadDate(file.uploadedAt)}</span>
+              {file.uploadedBy && <span>Uploaded by {file.uploadedBy}</span>}
             </div>
             
             {/* For audio files, show the inline player */}

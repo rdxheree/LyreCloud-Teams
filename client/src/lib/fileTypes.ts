@@ -106,22 +106,17 @@ export const formatFileSize = (bytes: number): string => {
 
 export const formatUploadDate = (date: string | Date): string => {
   const uploadDate = new Date(date);
-  const now = new Date();
   
-  const diffTime = Math.abs(now.getTime() - uploadDate.getTime());
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  // Format date in IST (UTC+5:30)
+  const options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata'
+  };
   
-  if (diffDays === 0) {
-    return 'Today';
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
-  } else {
-    const months = Math.floor(diffDays / 30);
-    return `${months} ${months === 1 ? 'month' : 'months'} ago`;
-  }
+  return new Intl.DateTimeFormat('en-IN', options).format(uploadDate);
 };
