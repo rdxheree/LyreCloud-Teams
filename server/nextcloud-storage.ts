@@ -90,9 +90,55 @@ export class NextCloudStorage implements IStorage {
       // Then scan for files in the cdns folder
       await this.scanFilesFromNextCloud();
       
+      // Verify storage consistency after initialization
+      await this.verifyStorageConsistency();
+      
       console.log('NextCloud storage initialization complete');
     } catch (error) {
       console.error('NextCloud storage initialization error:', error);
+    }
+  }
+  
+  // Helper method to verify storage consistency after initialization
+  private async verifyStorageConsistency(): Promise<void> {
+    try {
+      console.log('Verifying storage consistency...');
+      
+      // Check if admin user exists and has correct role
+      const adminUser = Array.from(this.users.values()).find(u => u.username === 'rdxhere.exe');
+      if (!adminUser) {
+        console.error('CONSISTENCY ERROR: Admin user missing after initialization!');
+        throw new Error('Admin user missing');
+      }
+      
+      if (adminUser.role !== 'admin') {
+        console.error(`CONSISTENCY ERROR: Admin user has incorrect role: "${adminUser.role}"`);
+        // Fix it immediately
+        adminUser.role = 'admin';
+        await this.saveUsersToNextCloud();
+        console.log('Fixed admin user role during consistency check');
+      }
+      
+      // Verify all users have required fields
+      const invalidUsers = Array.from(this.users.values()).filter(
+        u => !u.id || !u.username || !u.password || !u.role || !u.status
+      );
+      
+      if (invalidUsers.length > 0) {
+        console.error(`CONSISTENCY ERROR: Found ${invalidUsers.length} users with missing required fields`);
+        // Remove invalid users
+        for (const user of invalidUsers) {
+          console.warn(`Removing invalid user during consistency check:`, user);
+          this.users.delete(user.id);
+        }
+        await this.saveUsersToNextCloud();
+        console.log('Fixed invalid users during consistency check');
+      }
+      
+      console.log('Storage consistency verification complete');
+    } catch (error) {
+      console.error('Error during storage consistency verification:', error);
+      // We intentionally don't re-throw here to allow startup to continue
     }
   }
   
@@ -309,6 +355,27 @@ export class NextCloudStorage implements IStorage {
         throw new Error('WebDAV client not initialized');
       }
       
+      // Ensure there's at least one admin user
+      let adminUser = Array.from(this.users.values()).find(u => u.username === 'rdxhere.exe');
+      if (!adminUser) {
+        console.log('No admin user found before saving. Adding default admin...');
+        adminUser = {
+          id: this.userCurrentId++,
+          username: 'rdxhere.exe',
+          password: 'rdxpass', // Will be properly hashed by auth.ts
+          role: 'admin',
+          status: 'approved',
+          isApproved: true
+        };
+        this.users.set(adminUser.id, adminUser);
+      }
+      
+      // Always ensure admin role is correct
+      if (adminUser.role !== 'admin') {
+        console.log(`Fixing admin role from "${adminUser.role}" to "admin" before saving`);
+        adminUser.role = 'admin';
+      }
+      
       // Convert users Map to array - use a predictable sort order for consistency
       const usersArray = Array.from(this.users.values())
         .sort((a, b) => a.id - b.id); // Sort by ID for consistent ordering
@@ -316,7 +383,21 @@ export class NextCloudStorage implements IStorage {
       // Log the number of users being saved
       console.log(`Saving ${usersArray.length} users to NextCloud: ${usersArray.map(u => `${u.username} (${u.role})`).join(', ')}`);
       
-      // Convert to JSON string
+      // Convert to JSON string with double-check for data validity
+      // Add validation to ensure all user objects have required fields
+      for (const user of usersArray) {
+        if (!user.id || !user.username || !user.password) {
+          console.warn(`Fixing invalid user before saving:`, user);
+          user.id = user.id || this.userCurrentId++;
+          user.username = user.username || `user_${user.id}`;
+          user.password = user.password || 'default_password';
+        }
+        // Ensure correct roles and status
+        user.role = user.role || 'user';
+        user.status = user.status || 'pending';
+        user.isApproved = user.status === 'approved';
+      }
+      
       const usersJson = JSON.stringify(usersArray, null, 2);
       
       // Path for users file in NextCloud
@@ -348,7 +429,7 @@ export class NextCloudStorage implements IStorage {
       // Verify the save by immediately reading back the file
       try {
         // Force a small delay to ensure file write is complete on server
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500)); // Increased delay for reliability
         
         const content = await this.client.getFileContents(usersFilePath, { format: 'text' });
         
@@ -362,11 +443,13 @@ export class NextCloudStorage implements IStorage {
           });
           
           // Double check the admin user is present with correct role
-          const adminUser = savedUsers.find((u: User) => u.username === 'rdxhere.exe');
-          if (!adminUser) {
-            console.warn('WARNING: Admin user not found in saved file!');
-          } else if (adminUser.role !== 'admin') {
-            console.warn(`WARNING: Admin user has incorrect role: ${adminUser.role}`);
+          const adminUserSaved = savedUsers.find((u: User) => u.username === 'rdxhere.exe');
+          if (!adminUserSaved) {
+            console.warn('WARNING: Admin user not found in saved file! Will attempt to restore on next load.');
+          } else if (adminUserSaved.role !== 'admin') {
+            console.warn(`WARNING: Admin user has incorrect role: "${adminUserSaved.role}" in saved file! Will fix on next load.`);
+          } else {
+            console.log(`Admin user successfully verified in saved file with role: ${adminUserSaved.role}`);
           }
         }
       } catch (verifyError) {
@@ -475,6 +558,17 @@ export class NextCloudStorage implements IStorage {
           if (!user.id || !user.username || !user.password) {
             console.warn(`Skipping invalid user record:`, user);
             continue;
+          }
+          
+          // Normalize user fields to ensure consistency
+          user.role = user.role || 'user';
+          user.status = user.status || 'pending';
+          user.isApproved = user.status === 'approved';
+          
+          // Special validation for admin user
+          if (user.username === 'rdxhere.exe' && user.role !== 'admin') {
+            console.warn(`Fixing admin role during load: changing from "${user.role}" to "admin"`);
+            user.role = 'admin';
           }
           
           this.users.set(user.id, user);
