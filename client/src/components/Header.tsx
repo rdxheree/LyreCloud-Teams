@@ -80,10 +80,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
               </Link>
               
               {user.role === "admin" && (
-                <Link href="/users">
-                  <button className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/users' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
+                <Link href="/admin">
+                  <button className={`flex items-center gap-1 px-3 py-2 rounded-md transition-colors ${location === '/admin' ? 'bg-gray-100 font-medium' : 'hover:bg-gray-100'}`}>
                     <UserCog className="h-4 w-4" />
-                    User Management
+                    Admin Panel
                   </button>
                 </Link>
               )}

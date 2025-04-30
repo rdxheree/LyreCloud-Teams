@@ -9,13 +9,13 @@ import { ProtectedRoute } from "./lib/protected-route";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import AuthPage from "@/pages/auth-page";
-import UserManagementPage from "@/pages/admin/user-management";
+import AdminPage from "@/pages/admin/admin-page";
 
 function Router() {
   return (
     <Switch>
       <ProtectedRoute path="/" component={Home} />
-      <ProtectedRoute path="/users" component={UserManagementPage} />
+      <ProtectedRoute path="/admin" component={AdminPage} />
       <Route path="/auth" component={AuthPage} />
       <Route path="*" component={NotFound} />
     </Switch>
