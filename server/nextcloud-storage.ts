@@ -309,11 +309,12 @@ export class NextCloudStorage implements IStorage {
         throw new Error('WebDAV client not initialized');
       }
       
-      // Convert users Map to array
-      const usersArray = Array.from(this.users.values());
+      // Convert users Map to array - use a predictable sort order for consistency
+      const usersArray = Array.from(this.users.values())
+        .sort((a, b) => a.id - b.id); // Sort by ID for consistent ordering
       
       // Log the number of users being saved
-      console.log(`Saving ${usersArray.length} users to NextCloud: ${usersArray.map(u => u.username).join(', ')}`);
+      console.log(`Saving ${usersArray.length} users to NextCloud: ${usersArray.map(u => `${u.username} (${u.role})`).join(', ')}`);
       
       // Convert to JSON string
       const usersJson = JSON.stringify(usersArray, null, 2);
@@ -324,6 +325,19 @@ export class NextCloudStorage implements IStorage {
       // Ensure the base folder exists before saving
       await this.ensureBaseFolder();
       
+      // Create a backup file first (to avoid data loss if write fails)
+      try {
+        const exists = await this.client.exists(usersFilePath);
+        if (exists) {
+          const backupPath = `${this.baseFolder}/users.backup.json`;
+          await this.client.copyFile(usersFilePath, backupPath);
+          console.log('Created backup of users.json before saving');
+        }
+      } catch (backupError) {
+        console.warn('Could not create backup of users.json:', backupError);
+        // Continue with save even if backup fails
+      }
+      
       // Save the file to NextCloud
       await this.client.putFileContents(usersFilePath, usersJson, {
         overwrite: true
@@ -333,10 +347,27 @@ export class NextCloudStorage implements IStorage {
       
       // Verify the save by immediately reading back the file
       try {
+        // Force a small delay to ensure file write is complete on server
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
         const content = await this.client.getFileContents(usersFilePath, { format: 'text' });
+        
         if (typeof content === 'string') {
           const savedUsers = JSON.parse(content);
-          console.log(`Verified saved users: found ${savedUsers.length} users in NextCloud storage`);
+          console.log(`Verified saved users: found ${savedUsers.length} users in NextCloud storage:`);
+          
+          // Log each saved user for verification
+          savedUsers.forEach((user: User) => {
+            console.log(`- User ${user.id}: ${user.username} (${user.role}), status: ${user.status}`);
+          });
+          
+          // Double check the admin user is present with correct role
+          const adminUser = savedUsers.find((u: User) => u.username === 'rdxhere.exe');
+          if (!adminUser) {
+            console.warn('WARNING: Admin user not found in saved file!');
+          } else if (adminUser.role !== 'admin') {
+            console.warn(`WARNING: Admin user has incorrect role: ${adminUser.role}`);
+          }
         }
       } catch (verifyError) {
         console.warn('Could not verify saved users file:', verifyError);
