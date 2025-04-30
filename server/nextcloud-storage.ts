@@ -241,6 +241,7 @@ export class NextCloudStorage implements IStorage {
   private getMimeTypeFromFilename(filename: string): string {
     const ext = path.extname(filename).toLowerCase();
     switch (ext) {
+      // All image formats
       case '.jpg':
       case '.jpeg':
         return 'image/jpeg';
@@ -248,6 +249,20 @@ export class NextCloudStorage implements IStorage {
         return 'image/png';
       case '.gif':
         return 'image/gif';
+      case '.webp':
+        return 'image/webp';
+      case '.bmp':
+        return 'image/bmp';
+      case '.tiff':
+      case '.tif':
+        return 'image/tiff';
+      case '.heic':
+        return 'image/heic';
+      case '.heif':
+        return 'image/heif';
+      case '.svg':
+        return 'image/svg+xml';
+      // Document types
       case '.pdf':
         return 'application/pdf';
       case '.txt':
@@ -261,6 +276,7 @@ export class NextCloudStorage implements IStorage {
       case '.ppt':
       case '.pptx':
         return 'application/vnd.ms-powerpoint';
+      // Media types
       case '.mp3':
         return 'audio/mpeg';
       case '.mp4':
