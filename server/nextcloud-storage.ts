@@ -787,12 +787,75 @@ export class NextCloudStorage implements IStorage {
     try {
       await this.saveFileMetadataToNextCloud();
       console.log(`Saved metadata for new file: ${file.filename} uploaded by ${file.uploadedBy}`);
+      
+      // Save individual file metadata JSON
+      await this.saveIndividualFileMetadata(file);
     } catch (error) {
       console.error('Error saving file metadata after file creation:', error);
       // Continue anyway, don't block the upload
     }
     
     return file;
+  }
+  
+  // Create a nicely formatted individual JSON file for each uploaded file
+  private async saveIndividualFileMetadata(file: File): Promise<void> {
+    try {
+      // Format file size in a human-readable format
+      const sizeInBytes = file.size;
+      let formattedSize = '';
+      
+      if (sizeInBytes < 1024) {
+        formattedSize = `${sizeInBytes} bytes`;
+      } else if (sizeInBytes < 1024 * 1024) {
+        formattedSize = `${(sizeInBytes / 1024).toFixed(2)} KB`;
+      } else if (sizeInBytes < 1024 * 1024 * 1024) {
+        formattedSize = `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`;
+      } else {
+        formattedSize = `${(sizeInBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+      }
+      
+      // Format upload date in IST (Indian Standard Time)
+      const uploadDate = new Date(file.uploadedAt);
+      const istOptions: Intl.DateTimeFormatOptions = {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      };
+      
+      const formattedDate = uploadDate.toLocaleString('en-IN', istOptions);
+      
+      // Create metadata file content
+      const metadata = {
+        filename: file.originalFilename,
+        size: formattedSize,
+        uploaded_on: formattedDate,
+        uploaded_by: file.uploadedBy,
+        mime_type: file.mimeType,
+        system_filename: file.filename,
+        file_id: file.id
+      };
+      
+      // Generate a JSON string with proper formatting
+      const jsonContent = JSON.stringify(metadata, null, 2);
+      
+      // Name the metadata file with same name as the original file plus .json extension
+      const metadataFilename = `${file.filename}.json`;
+      const metadataPath = this.getFullPath(metadataFilename);
+      
+      // Save the file to NextCloud
+      await this.client.putFileContents(metadataPath, jsonContent, { overwrite: true });
+      
+      console.log(`Individual metadata file created: ${metadataFilename}`);
+    } catch (error) {
+      console.error(`Error creating individual metadata file for ${file.filename}:`, error);
+      // Don't throw - this is an enhancement, not critical
+    }
   }
   
   async updateFile(id: number, updateData: Partial<File>): Promise<File | undefined> {
@@ -835,6 +898,22 @@ export class NextCloudStorage implements IStorage {
             // Delete the old file
             await this.client.deleteFile(sourcePath);
             
+            // Also try to rename the individual JSON metadata file if it exists
+            try {
+              const oldMetadataPath = `${sourcePath}.json`;
+              const newMetadataPath = `${destPath}.json`;
+              
+              const metadataExists = await this.client.exists(oldMetadataPath);
+              if (metadataExists) {
+                await this.client.copyFile(oldMetadataPath, newMetadataPath);
+                await this.client.deleteFile(oldMetadataPath);
+                console.log(`Renamed individual metadata file to: ${path.basename(newMetadataPath)}`);
+              }
+            } catch (metadataError) {
+              console.error('Error renaming individual metadata JSON file:', metadataError);
+              // Not critical, continue
+            }
+            
             // Update metadata with new filename and path
             updateData.filename = newFilename;
             updateData.path = destPath;
@@ -870,6 +949,9 @@ export class NextCloudStorage implements IStorage {
     try {
       await this.saveFileMetadataToNextCloud();
       console.log(`Saved updated metadata for file: ${updatedFile.filename}`);
+      
+      // Also update the individual JSON metadata file
+      await this.saveIndividualFileMetadata(updatedFile);
     } catch (error) {
       console.error('Error saving file metadata after update:', error);
       // Continue anyway, don't block the update
@@ -891,6 +973,21 @@ export class NextCloudStorage implements IStorage {
       const exists = await this.client.exists(file.path);
       if (exists) {
         await this.client.deleteFile(file.path);
+      }
+      
+      // Also try to delete the individual JSON metadata file
+      try {
+        const metadataFilename = `${file.filename}.json`;
+        const metadataPath = this.getFullPath(metadataFilename);
+        
+        const metadataExists = await this.client.exists(metadataPath);
+        if (metadataExists) {
+          await this.client.deleteFile(metadataPath);
+          console.log(`Deleted individual metadata file: ${metadataFilename}`);
+        }
+      } catch (jsonError) {
+        console.error(`Error deleting individual metadata JSON file for ${file.filename}:`, jsonError);
+        // Continue anyway, not critical
       }
       
       // Update metadata to remove the deleted file
