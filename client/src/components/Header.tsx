@@ -37,7 +37,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
         )}
         <picture>
           <source srcSet="/images/logo.svg" type="image/svg+xml" />
-          <img src="/images/logo.webp" alt="LyreCloud Logo" className="h-7 md:h-8 w-auto flex-shrink-0" />
+          <source srcSet="/images/logo.webp" type="image/webp" />
+          <source srcSet="/images/logo.png" type="image/png" />
+          <img src="/images/logo.png" alt="LyreCloud Logo" className="h-7 md:h-8 w-auto flex-shrink-0" />
         </picture>
         <h1 className="ml-2 md:ml-3 text-lg md:text-2xl font-semibold text-primary-600 truncate">LyreCloud Teams</h1>
       </div>
