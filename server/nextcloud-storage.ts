@@ -782,6 +782,16 @@ export class NextCloudStorage implements IStorage {
     };
     
     this.files.set(id, file);
+    
+    // Save metadata to NextCloud to persist the uploadedBy information
+    try {
+      await this.saveFileMetadataToNextCloud();
+      console.log(`Saved metadata for new file: ${file.filename} uploaded by ${file.uploadedBy}`);
+    } catch (error) {
+      console.error('Error saving file metadata after file creation:', error);
+      // Continue anyway, don't block the upload
+    }
+    
     return file;
   }
   
@@ -834,6 +844,16 @@ export class NextCloudStorage implements IStorage {
     // Update the file metadata
     const updatedFile = { ...file, ...updateData };
     this.files.set(id, updatedFile);
+    
+    // Save metadata to NextCloud to persist the changes
+    try {
+      await this.saveFileMetadataToNextCloud();
+      console.log(`Saved updated metadata for file: ${updatedFile.filename}`);
+    } catch (error) {
+      console.error('Error saving file metadata after update:', error);
+      // Continue anyway, don't block the update
+    }
+    
     return updatedFile;
   }
 
@@ -851,6 +871,16 @@ export class NextCloudStorage implements IStorage {
       if (exists) {
         await this.client.deleteFile(file.path);
       }
+      
+      // Update metadata to remove the deleted file
+      try {
+        await this.saveFileMetadataToNextCloud();
+        console.log(`Updated metadata after deleting file: ${file.filename}`);
+      } catch (metadataError) {
+        console.error('Error updating metadata after file deletion:', metadataError);
+        // Continue anyway, the file is already deleted
+      }
+      
       return true;
     } catch (error: any) {
       console.error(`Error deleting file ${id} from NextCloud:`, error);
