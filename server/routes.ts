@@ -251,6 +251,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rename a file
+  app.patch('/api/files/:id/rename', async (req: Request, res: Response) => {
+    try {
+      const fileId = parseInt(req.params.id);
+      if (isNaN(fileId)) {
+        return res.status(400).json({ message: 'Invalid file ID' });
+      }
+
+      const { newName } = req.body;
+      if (!newName || typeof newName !== 'string') {
+        return res.status(400).json({ message: 'Invalid or missing new name' });
+      }
+
+      // Get the existing file
+      const file = await storage.getFile(fileId);
+      if (!file) {
+        return res.status(404).json({ message: 'File not found' });
+      }
+
+      // Update the original filename (display name)
+      const updatedFile = await storage.updateFile(fileId, { 
+        originalFilename: newName 
+      });
+
+      if (!updatedFile) {
+        return res.status(500).json({ message: 'Failed to rename file' });
+      }
+
+      return res.json(updatedFile);
+    } catch (error) {
+      console.error('Error renaming file:', error);
+      return res.status(500).json({ message: 'Failed to rename file' });
+    }
+  });
+
+  // Delete multiple files
+  app.post('/api/files/delete-multiple', async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body;
+      
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Invalid or missing file IDs' });
+      }
+
+      const results = [];
+      
+      // Delete each file
+      for (const id of ids) {
+        const fileId = parseInt(id);
+        if (isNaN(fileId)) {
+          results.push({ id: id, success: false, message: 'Invalid file ID' });
+          continue;
+        }
+
+        const success = await storage.deleteFile(fileId);
+        results.push({ id: fileId, success });
+      }
+
+      return res.status(200).json({ 
+        message: 'Batch delete operation completed', 
+        results 
+      });
+    } catch (error) {
+      console.error('Error deleting multiple files:', error);
+      return res.status(500).json({ message: 'Failed to delete files' });
+    }
+  });
+
   // Delete a file
   app.delete('/api/files/:id', async (req: Request, res: Response) => {
     try {

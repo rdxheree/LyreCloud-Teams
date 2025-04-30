@@ -24,6 +24,7 @@ export interface IStorage {
   getFile(id: number): Promise<File | undefined>;
   getFileByFilename(filename: string): Promise<File | undefined>;
   createFile(file: InsertFile): Promise<File>;
+  updateFile(id: number, updateData: Partial<File>): Promise<File | undefined>;
   deleteFile(id: number): Promise<boolean>;
   
   // Stream operations for file handling
@@ -130,6 +131,23 @@ export class MemStorage implements IStorage {
     };
     this.files.set(id, file);
     return file;
+  }
+
+  async updateFile(id: number, updateData: Partial<File>): Promise<File | undefined> {
+    const file = this.files.get(id);
+    if (!file || file.isDeleted) return undefined;
+
+    // Prevent changing critical properties
+    const safeUpdateData = { ...updateData };
+    delete safeUpdateData.id;
+    delete safeUpdateData.filename;
+    delete safeUpdateData.path;
+    delete safeUpdateData.isDeleted;
+
+    // Update the file metadata
+    const updatedFile = { ...file, ...safeUpdateData };
+    this.files.set(id, updatedFile);
+    return updatedFile;
   }
 
   async deleteFile(id: number): Promise<boolean> {
