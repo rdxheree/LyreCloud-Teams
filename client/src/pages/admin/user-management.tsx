@@ -80,8 +80,10 @@ function UserManagementContent() {
   // Approve user mutation
   const approveUserMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/users/approve/${userId}`);
-      return await res.json();
+      return await apiRequest<{ message: string }>({
+        method: "POST", 
+        url: `/api/users/approve/${userId}`
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -103,8 +105,10 @@ function UserManagementContent() {
   // Reject user mutation
   const rejectUserMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/users/reject/${userId}`);
-      return await res.json();
+      return await apiRequest<{ message: string }>({
+        method: "POST", 
+        url: `/api/users/reject/${userId}`
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -126,8 +130,10 @@ function UserManagementContent() {
   // Make admin mutation
   const makeAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/users/make-admin/${userId}`);
-      return await res.json();
+      return await apiRequest<{ message: string }>({
+        method: "POST", 
+        url: `/api/users/make-admin/${userId}`
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -148,8 +154,10 @@ function UserManagementContent() {
   // Remove admin mutation
   const removeAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/users/remove-admin/${userId}`);
-      return await res.json();
+      return await apiRequest<{ message: string }>({
+        method: "POST", 
+        url: `/api/users/remove-admin/${userId}`
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -170,8 +178,10 @@ function UserManagementContent() {
   // Delete user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("DELETE", `/api/users/${userId}`);
-      return await res.json();
+      return await apiRequest<{ message: string }>({
+        method: "DELETE", 
+        url: `/api/users/${userId}`
+      });
     },
     onSuccess: () => {
       setDeleteUserId(null);
