@@ -12,6 +12,7 @@ export class NextCloudStorage implements IStorage {
   private fileCurrentId: number;
   public client: WebDAVClient;
   private baseFolder: string;
+  private fileMetadata: Record<string, Partial<File>> | null = null;
   
   constructor() {
     // Initialize user and file storage in memory
@@ -87,11 +88,17 @@ export class NextCloudStorage implements IStorage {
       // Load users from NextCloud
       await this.loadUsersFromNextCloud();
       
+      // Load file metadata from NextCloud
+      await this.loadFileMetadataFromNextCloud();
+      
       // Then scan for files in the cdns folder
       await this.scanFilesFromNextCloud();
       
       // Verify storage consistency after initialization
       await this.verifyStorageConsistency();
+
+      // Save file metadata back to NextCloud to ensure it's up to date
+      await this.saveFileMetadataToNextCloud();
       
       console.log('NextCloud storage initialization complete');
     } catch (error) {
@@ -191,6 +198,73 @@ export class NextCloudStorage implements IStorage {
     return `${this.baseFolder}/cdns/${filename}`;
   }
 
+  // Load file metadata from NextCloud
+  private async loadFileMetadataFromNextCloud(): Promise<void> {
+    try {
+      // Check if files.json exists in the base folder
+      const metadataPath = `${this.baseFolder}/files.json`;
+      let fileMetadata: Record<string, Partial<File>> = {};
+      
+      try {
+        const exists = await this.client.exists(metadataPath);
+        if (exists) {
+          console.log("Found files.json metadata file, loading...");
+          const fileContent = await this.client.getFileContents(metadataPath, { format: 'text' });
+          if (fileContent && typeof fileContent === 'string') {
+            try {
+              fileMetadata = JSON.parse(fileContent);
+              console.log(`Loaded metadata for ${Object.keys(fileMetadata).length} files`);
+            } catch (e) {
+              console.error("Error parsing files.json:", e);
+              console.log("Content of files.json:", fileContent);
+            }
+          }
+        } else {
+          console.log("No files.json metadata file found, will create one on next save");
+        }
+      } catch (error) {
+        console.error("Error checking/loading file metadata:", error);
+      }
+      
+      // Store the metadata to apply during scan
+      this.fileMetadata = fileMetadata;
+    } catch (error) {
+      console.error("Error loading file metadata:", error);
+    }
+  }
+  
+  // Save file metadata to NextCloud
+  private async saveFileMetadataToNextCloud(): Promise<void> {
+    try {
+      const metadataPath = `${this.baseFolder}/files.json`;
+      
+      // Create a map of filename -> metadata
+      const metadata: Record<string, Partial<File>> = {};
+      
+      // Add all existing files to the metadata
+      for (const file of this.files.values()) {
+        if (!file.isDeleted) {
+          // Only save relevant metadata
+          metadata[file.filename] = {
+            originalFilename: file.originalFilename,
+            uploadedBy: file.uploadedBy,
+            uploadedAt: file.uploadedAt
+          };
+        }
+      }
+      
+      // Convert to JSON
+      const jsonContent = JSON.stringify(metadata, null, 2);
+      
+      // Save to NextCloud
+      console.log(`Saving metadata for ${Object.keys(metadata).length} files to NextCloud`);
+      await this.client.putFileContents(metadataPath, jsonContent, { overwrite: true });
+      console.log("File metadata saved successfully");
+    } catch (error) {
+      console.error("Error saving file metadata:", error);
+    }
+  }
+
   // Scan and load files from NextCloud
   private async scanFilesFromNextCloud(): Promise<void> {
     try {
@@ -229,6 +303,14 @@ export class NextCloudStorage implements IStorage {
           isDeleted: false,
           uploadedBy: "system"
         };
+        
+        // Apply metadata if available
+        if (this.fileMetadata && this.fileMetadata[filename]) {
+          const savedMetadata = this.fileMetadata[filename];
+          if (savedMetadata.uploadedBy) newFile.uploadedBy = savedMetadata.uploadedBy;
+          if (savedMetadata.uploadedAt) newFile.uploadedAt = new Date(savedMetadata.uploadedAt);
+          if (savedMetadata.originalFilename) newFile.originalFilename = savedMetadata.originalFilename;
+        }
         
         this.files.set(newFile.id, newFile);
       }
@@ -716,7 +798,9 @@ export class NextCloudStorage implements IStorage {
         const fileExt = path.extname(file.filename);
         
         // Create new filename with the provided name but keep the original extension
-        const newFilename = updateData.originalFilename + fileExt;
+        // Remove any existing extension from the new name to avoid duplicates
+        const baseNewName = updateData.originalFilename.replace(/\.[^/.]+$/, "");
+        const newFilename = baseNewName + fileExt;
         
         // Create paths for source and destination
         const sourcePath = file.path;
