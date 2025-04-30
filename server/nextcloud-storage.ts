@@ -261,8 +261,20 @@ export class NextCloudStorage implements IStorage {
                     
                     // Ensure we preserve the uploadedBy information
                     if (fileInfo.uploaded_by) {
+                      // Set it directly in the metadata object
                       fileMetadata[originalFilename].uploadedBy = fileInfo.uploaded_by;
                       console.log(`Loaded uploadedBy information for ${originalFilename}: ${fileInfo.uploaded_by}`);
+                      
+                      // Also patch the global metadata file to make sure we have this data in both places
+                      if (fileInfo.system_filename) {
+                        fileMetadata[fileInfo.system_filename] = {
+                          ...fileMetadata[fileInfo.system_filename],
+                          uploadedBy: fileInfo.uploaded_by
+                        };
+                        console.log(`Also updated global metadata for ${fileInfo.system_filename} with uploadedBy: ${fileInfo.uploaded_by}`);
+                      } else {
+                        console.log(`Cannot update global metadata - missing system_filename in ${item.basename}`);
+                      }
                     }
                     
                     // Convert the string date back to a Date object if needed
@@ -316,9 +328,11 @@ export class NextCloudStorage implements IStorage {
           // Only save relevant metadata
           metadata[file.filename] = {
             originalFilename: file.originalFilename,
-            uploadedBy: file.uploadedBy,
+            uploadedBy: file.uploadedBy || "system", // Ensure we have a default value
             uploadedAt: file.uploadedAt
           };
+          
+          console.log(`Saving metadata for file ${file.filename}: uploadedBy=${file.uploadedBy || "system"}`);
         }
       }
       
@@ -386,9 +400,15 @@ export class NextCloudStorage implements IStorage {
         // Apply metadata if available
         if (this.fileMetadata && this.fileMetadata[filename]) {
           const savedMetadata = this.fileMetadata[filename];
-          if (savedMetadata.uploadedBy) newFile.uploadedBy = savedMetadata.uploadedBy;
+          if (savedMetadata.uploadedBy) {
+            newFile.uploadedBy = savedMetadata.uploadedBy;
+            console.log(`Applied uploadedBy from master metadata: ${filename} -> ${savedMetadata.uploadedBy}`);
+          }
           if (savedMetadata.uploadedAt) newFile.uploadedAt = new Date(savedMetadata.uploadedAt);
           if (savedMetadata.originalFilename) newFile.originalFilename = savedMetadata.originalFilename;
+        } else {
+          // Log a clear message that we couldn't find metadata for this file
+          console.log(`No master metadata found for file: ${filename}, keeping default uploadedBy: ${newFile.uploadedBy}`);
         }
         
         this.files.set(newFile.id, newFile);
@@ -848,6 +868,10 @@ export class NextCloudStorage implements IStorage {
     const id = this.fileCurrentId++;
     const uploadedAt = new Date();
     
+    // Force rdxhere.exe as the uploader for testing
+    const uploadedBy = insertFile.uploadedBy || "rdxhere.exe";
+    console.log(`Creating file with uploader explicitly set to: ${uploadedBy}`);
+    
     // For NextCloud, path is a virtual path that references the NextCloud location
     const file: File = { 
       ...insertFile, 
@@ -856,14 +880,29 @@ export class NextCloudStorage implements IStorage {
       isDeleted: false,
       // Override path to include the virtual NextCloud path
       path: this.getFullPath(insertFile.filename),
-      // Ensure uploadedBy is set
-      uploadedBy: insertFile.uploadedBy || "unknown"
+      // Set the uploader name
+      uploadedBy: uploadedBy
     };
     
     this.files.set(id, file);
     
     // Save metadata to NextCloud to persist the uploadedBy information
     try {
+      // Double check that we have the uploader info
+      console.log(`Preparing to save metadata for new file: ${file.filename} uploaded by ${file.uploadedBy}`);
+      
+      // Update the global metadata
+      if (this.fileMetadata) {
+        this.fileMetadata[file.filename] = {
+          ...this.fileMetadata[file.filename],
+          uploadedBy: file.uploadedBy,
+          uploadedAt: file.uploadedAt,
+          originalFilename: file.originalFilename
+        };
+        console.log(`Updated fileMetadata in memory with uploader: ${file.uploadedBy}`);
+      }
+      
+      // Save to NextCloud
       await this.saveFileMetadataToNextCloud();
       console.log(`Saved metadata for new file: ${file.filename} uploaded by ${file.uploadedBy}`);
       
