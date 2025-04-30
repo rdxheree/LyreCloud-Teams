@@ -203,6 +203,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Log file upload event
+      await createLog(
+        LogType.FILE_UPLOAD,
+        `File uploaded: ${req.file.originalname}`,
+        uploadedBy,
+        { 
+          fileId: savedFile.id, 
+          filename: savedFile.filename,
+          originalFilename: savedFile.originalFilename,
+          size: savedFile.size,
+          mimeType: savedFile.mimeType
+        }
+      );
+      
       return res.status(201).json(savedFile);
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -250,6 +264,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Try to get a readable stream
       try {
         const fileStream = await storage.createReadStream(file.path);
+        
+        // Log file access/view through CDN
+        // Try to get the user if authenticated
+        let username = "anonymous";
+        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+          username = (req.user as any).username || "anonymous";
+        }
+        
+        await createLog(
+          LogType.FILE_DOWNLOAD,
+          `File viewed in CDN: ${file.originalFilename}`,
+          username,
+          { 
+            fileId: file.id, 
+            filename: file.filename,
+            originalFilename: file.originalFilename,
+            method: "cdn"
+          }
+        );
+        
         fileStream.pipe(res);
       } catch (streamError) {
         console.error('Error streaming file:', streamError);
@@ -304,6 +338,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Get a readable stream from storage (works for both local and NextCloud)
         const fileStream = await storage.createReadStream(file.path);
+        
+        // Log file download
+        let username = "anonymous";
+        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+          username = (req.user as any).username || "anonymous";
+        }
+        
+        await createLog(
+          LogType.FILE_DOWNLOAD,
+          `File downloaded: ${file.originalFilename}`,
+          username,
+          { 
+            fileId: file.id, 
+            filename: file.filename,
+            originalFilename: file.originalFilename,
+            method: "download"
+          }
+        );
+        
         fileStream.pipe(res);
       } catch (streamError) {
         console.error('Error streaming file:', streamError);
@@ -347,6 +400,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        // Log file rename operation
+        let username = "anonymous";
+        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+          username = (req.user as any).username || "anonymous";
+        }
+        
+        await createLog(
+          LogType.FILE_RENAME,
+          `File renamed from "${file.originalFilename}" to "${newName}"`,
+          username,
+          { 
+            fileId: file.id, 
+            filename: file.filename,
+            oldName: file.originalFilename,
+            newName: newName
+          }
+        );
+        
         return res.json({
           ...updatedFile,
           message: 'File renamed successfully',
@@ -398,6 +469,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const results = [];
       
+      // Get username for logging
+      let username = "anonymous";
+      if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+        username = (req.user as any).username || "anonymous";
+      }
+      
       // Delete each file
       for (const id of ids) {
         const fileId = parseInt(id);
@@ -405,9 +482,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           results.push({ id: id, success: false, message: 'Invalid file ID' });
           continue;
         }
+        
+        // Get file data before deleting for the log
+        const file = await storage.getFile(fileId);
+        if (!file) {
+          results.push({ id: fileId, success: false, message: 'File not found' });
+          continue;
+        }
 
         const success = await storage.deleteFile(fileId);
         results.push({ id: fileId, success });
+        
+        if (success) {
+          // Log file deletion if successful
+          await createLog(
+            LogType.FILE_DELETE,
+            `File deleted (batch): ${file.originalFilename}`,
+            username,
+            { 
+              fileId: file.id, 
+              filename: file.filename,
+              originalFilename: file.originalFilename,
+              size: file.size,
+              mimeType: file.mimeType,
+              batchOperation: true
+            }
+          );
+        }
       }
 
       return res.status(200).json({ 
@@ -427,12 +528,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const files = await storage.getFiles();
       console.log(`Purging all ${files.length} files from system...`);
       
+      // Get username for logging
+      let username = "system";
+      if (_req.isAuthenticated && _req.isAuthenticated() && _req.user) {
+        username = (_req.user as any).username || "system";
+      }
+      
       // Process the deletions
       const results = [];
       for (const file of files) {
         try {
           const success = await storage.deleteFile(file.id);
           results.push({ id: file.id, success, message: success ? 'Deleted' : 'Failed to delete' });
+          
+          if (success) {
+            // Log file deletion if successful
+            await createLog(
+              LogType.FILE_DELETE,
+              `File deleted (purge): ${file.originalFilename}`,
+              username,
+              { 
+                fileId: file.id, 
+                filename: file.filename,
+                originalFilename: file.originalFilename,
+                size: file.size,
+                mimeType: file.mimeType,
+                batchOperation: true,
+                purgeOperation: true
+              }
+            );
+          }
         } catch (err) {
           results.push({ id: file.id, success: false, message: 'Error during deletion' });
         }
@@ -493,10 +618,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Invalid file ID' });
       }
 
+      // Get file data before deleting for the log
+      const file = await storage.getFile(fileId);
+      if (!file) {
+        return res.status(404).json({ message: 'File not found' });
+      }
+      
       const success = await storage.deleteFile(fileId);
       if (!success) {
         return res.status(404).json({ message: 'File not found or could not be deleted' });
       }
+      
+      // Log file deletion
+      let username = "anonymous";
+      if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+        username = (req.user as any).username || "anonymous";
+      }
+      
+      await createLog(
+        LogType.FILE_DELETE,
+        `File deleted: ${file.originalFilename}`,
+        username,
+        { 
+          fileId: file.id, 
+          filename: file.filename,
+          originalFilename: file.originalFilename,
+          size: file.size,
+          mimeType: file.mimeType
+        }
+      );
 
       return res.status(200).json({ message: 'File deleted successfully' });
     } catch (error) {
