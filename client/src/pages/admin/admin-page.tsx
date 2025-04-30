@@ -136,7 +136,7 @@ function AdminContent() {
   });
 
   // Fetch logs
-  const { data: logs = [], isLoading: isLoadingLogs } = useQuery<LogEntry[]>({
+  const { data: logsResponse, isLoading: isLoadingLogs } = useQuery({
     queryKey: ["/api/logs", logType],
     queryFn: async ({ queryKey }) => {
       const [endpoint, filterType] = queryKey;
@@ -145,6 +145,9 @@ function AdminContent() {
     },
     enabled: !!user && user.role === "admin" && activeTab === "logs",
   });
+  
+  // Extract logs array from response
+  const logs: LogEntry[] = logsResponse?.logs || [];
 
   // Approve user mutation
   const approveUserMutation = useMutation({
