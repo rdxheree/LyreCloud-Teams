@@ -355,14 +355,25 @@ async function setupDefaultAdmin() {
         isApproved: true
       });
       console.log("Created default admin user:", adminUsername);
-    } else if (existingAdmin.role !== "admin") {
-      // Ensure the user has admin role if it exists but isn't an admin
-      await storage.updateUser(existingAdmin.id, {
+    } else {
+      // Check if the password is already hashed
+      const passwordIsHashed = existingAdmin.password.includes('.');
+      
+      let updates: Partial<SelectUser> = {
         role: "admin",
         status: "approved",
         isApproved: true
-      });
-      console.log("Restored admin privileges to", adminUsername);
+      };
+      
+      // If password isn't hashed yet, hash it now
+      if (!passwordIsHashed) {
+        updates.password = await hashPassword(adminPassword);
+        console.log("Updating admin password with hashed version");
+      }
+      
+      // Ensure the user has admin role and proper password
+      await storage.updateUser(existingAdmin.id, updates);
+      console.log("Ensured admin privileges and proper security for", adminUsername);
     }
   } catch (error) {
     console.error("Error setting up default admin:", error);

@@ -284,14 +284,26 @@ export class NextCloudStorage implements IStorage {
   }
   
   // Save users to a users.json file in NextCloud
-  private async saveUsersToNextCloud(): Promise<void> {
+  private async saveUsersToNextCloud(retryCount = 0): Promise<void> {
+    const maxRetries = 3;
+    
     try {
+      // Check if the client is initialized
+      if (!this.client) {
+        throw new Error('WebDAV client not initialized');
+      }
+      
       // Convert users Map to array
       const usersArray = Array.from(this.users.values());
+      
       // Convert to JSON string
       const usersJson = JSON.stringify(usersArray, null, 2);
+      
       // Path for users file in NextCloud
       const usersFilePath = `${this.baseFolder}/users.json`;
+      
+      // Ensure the base folder exists before saving
+      await this.ensureBaseFolder();
       
       // Save the file to NextCloud
       await this.client.putFileContents(usersFilePath, usersJson, {
@@ -300,7 +312,22 @@ export class NextCloudStorage implements IStorage {
       
       console.log('Users saved to NextCloud successfully');
     } catch (error: any) {
-      console.error('Error saving users to NextCloud:', error);
+      console.error(`Error saving users to NextCloud (attempt ${retryCount + 1}/${maxRetries + 1}):`, error);
+      
+      // Retry if we haven't exceeded max retries
+      if (retryCount < maxRetries) {
+        console.log(`Retrying saving users to NextCloud (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+        
+        // Wait a bit before retrying (exponential backoff)
+        const delay = Math.pow(2, retryCount) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // Retry the save operation
+        return this.saveUsersToNextCloud(retryCount + 1);
+      } else {
+        console.error(`Failed to save users to NextCloud after ${maxRetries + 1} attempts`);
+        throw new Error(`Failed to save users to NextCloud: ${error.message || 'Unknown error'}`);
+      }
     }
   }
   
@@ -311,15 +338,22 @@ export class NextCloudStorage implements IStorage {
       const usersFilePath = `${this.baseFolder}/users.json`;
       
       // Check if file exists
-      const exists = await this.client.exists(usersFilePath);
+      let exists = false;
+      try {
+        exists = await this.client.exists(usersFilePath);
+      } catch (existsError) {
+        console.warn('Error checking if users.json exists, will create it:', existsError);
+      }
+      
       if (!exists) {
         console.log('Users file does not exist in NextCloud yet. Creating default admin...');
         
-        // Create default admin user
+        // Create default admin user with hashed password
+        // Note: We're not hashing this password here because it should be hashed by auth.ts setupDefaultAdmin
         const adminUser: User = {
           id: this.userCurrentId++,
           username: 'rdxhere.exe',
-          password: 'rdxpass', // This will be hashed by auth.ts before saving
+          password: 'rdxpass', // Will be properly hashed by auth.ts
           role: 'admin',
           status: 'approved',
           isApproved: true
@@ -329,55 +363,69 @@ export class NextCloudStorage implements IStorage {
         
         // Save to NextCloud
         await this.saveUsersToNextCloud();
+        console.log('Created default admin user with username rdxhere.exe');
         return;
       }
       
       // Read file content
-      const fileContent = await this.client.getFileContents(usersFilePath, { format: 'text' });
+      let fileContent;
+      try {
+        fileContent = await this.client.getFileContents(usersFilePath, { format: 'text' });
+      } catch (readError) {
+        console.error('Error reading users.json from NextCloud:', readError);
+        throw new Error('Failed to read users file from NextCloud');
+      }
       
       if (typeof fileContent !== 'string') {
         throw new Error('Unexpected file content format');
       }
       
-      // Parse JSON
-      const usersArray = JSON.parse(fileContent) as User[];
-      
-      // Find max ID to determine next ID
-      let maxId = 0;
-      
-      // Clear current users and rebuild from file
-      this.users.clear();
-      
-      // Add users to Map
-      for (const user of usersArray) {
-        this.users.set(user.id, user);
-        maxId = Math.max(maxId, user.id);
-      }
-      
-      // Update current ID
-      this.userCurrentId = maxId + 1;
-      
-      console.log(`Loaded ${usersArray.length} users from NextCloud`);
-      
-      // Check if admin exists, create one if not
-      const adminExists = Array.from(this.users.values()).some(u => u.role === 'admin');
-      if (!adminExists) {
-        console.log('No admin user found. Creating default admin...');
+      try {
+        // Parse JSON
+        const usersArray = JSON.parse(fileContent) as User[];
         
-        // Create default admin user
-        const adminUser: User = {
-          id: this.userCurrentId++,
-          username: 'rdxhere.exe',
-          password: 'rdxpass', // This will be hashed by auth.ts before saving
-          role: 'admin',
-          status: 'approved',
-          isApproved: true
-        };
+        // Find max ID to determine next ID
+        let maxId = 0;
         
-        this.users.set(adminUser.id, adminUser);
+        // Clear current users and rebuild from file
+        this.users.clear();
         
-        // Save updated users to NextCloud
-        await this.saveUsersToNextCloud();
+        // Add users to Map
+        for (const user of usersArray) {
+          this.users.set(user.id, user);
+          maxId = Math.max(maxId, user.id);
+        }
+        
+        // Update current ID
+        this.userCurrentId = maxId + 1;
+        
+        console.log(`Loaded ${usersArray.length} users from NextCloud`);
+        
+        // Check if admin exists, create one if not
+        const adminExists = Array.from(this.users.values()).some(u => u.username === 'rdxhere.exe' && u.role === 'admin');
+        if (!adminExists) {
+          console.log('No admin user found or admin privileges missing. Restoring default admin...');
+          
+          // Create default admin user
+          // Note: We're not hashing this password here because it should be hashed by auth.ts setupDefaultAdmin
+          const adminUser: User = {
+            id: this.userCurrentId++,
+            username: 'rdxhere.exe',
+            password: 'rdxpass', // Will be properly hashed by auth.ts
+            role: 'admin',
+            status: 'approved',
+            isApproved: true
+          };
+          
+          this.users.set(adminUser.id, adminUser);
+          
+          // Save updated users to NextCloud
+          await this.saveUsersToNextCloud();
+          console.log('Restored default admin user: rdxhere.exe');
+        }
+      } catch (parseError) {
+        console.error('Error parsing users JSON from NextCloud:', parseError);
+        throw new Error('Invalid users file format in NextCloud');
       }
     } catch (error: any) {
       console.error('Error loading users from NextCloud:', error);
@@ -387,10 +435,11 @@ export class NextCloudStorage implements IStorage {
       this.users.clear();
       
       // Create default admin user
+      // Note: We're not hashing this password here because it should be hashed by auth.ts setupDefaultAdmin
       const adminUser: User = {
         id: this.userCurrentId++,
         username: 'rdxhere.exe',
-        password: 'rdxpass', // This will be hashed by auth.ts before saving
+        password: 'rdxpass', // Will be properly hashed by auth.ts
         role: 'admin',
         status: 'approved',
         isApproved: true
@@ -401,6 +450,7 @@ export class NextCloudStorage implements IStorage {
       // Try to save to NextCloud
       try {
         await this.saveUsersToNextCloud();
+        console.log('Created default admin user as fallback');
       } catch (saveError) {
         console.error('Failed to save initial users to NextCloud:', saveError);
       }
