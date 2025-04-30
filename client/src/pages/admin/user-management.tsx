@@ -126,11 +126,11 @@ function UserManagementContent() {
   // Make admin mutation
   const makeAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/admin/make-admin/${userId}`);
+      const res = await apiRequest("POST", `/api/users/make-admin/${userId}`);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({
         title: "Admin Role Granted",
         description: "User has been granted admin privileges",
@@ -148,11 +148,11 @@ function UserManagementContent() {
   // Remove admin mutation
   const removeAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("POST", `/api/admin/remove-admin/${userId}`);
+      const res = await apiRequest("POST", `/api/users/remove-admin/${userId}`);
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({
         title: "Admin Role Removed",
         description: "User's admin privileges have been removed",
@@ -170,13 +170,13 @@ function UserManagementContent() {
   // Delete user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: number) => {
-      const res = await apiRequest("DELETE", `/api/admin/delete-user/${userId}`);
+      const res = await apiRequest("DELETE", `/api/users/${userId}`);
       return await res.json();
     },
     onSuccess: () => {
       setDeleteUserId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/pending-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/pending"] });
       toast({
         title: "User Deleted",
         description: "User has been deleted successfully",
@@ -261,7 +261,7 @@ function UserManagementContent() {
               <div className="flex justify-end mb-4">
                 <Button 
                   onClick={() => {
-                    queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/users"] });
                     toast({
                       title: "Refreshed",
                       description: "User list refreshed",
@@ -366,7 +366,7 @@ function UserManagementContent() {
               <div className="flex justify-end mb-4">
                 <Button 
                   onClick={() => {
-                    queryClient.invalidateQueries({ queryKey: ["/api/admin/pending-users"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/users/pending"] });
                     toast({
                       title: "Refreshed",
                       description: "Registration requests refreshed",

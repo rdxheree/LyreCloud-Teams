@@ -179,8 +179,8 @@ export function setupAuth(app: Express) {
     res.json(userWithoutPassword);
   });
 
-  // Admin routes
-  app.get("/api/admin/users", isAdmin, async (_req: Request, res: Response) => {
+  // User management routes
+  app.get("/api/users", isAdmin, async (_req: Request, res: Response) => {
     try {
       const users = await storage.getAllUsers();
       const usersWithoutPasswords = users.map(user => {
@@ -194,7 +194,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.get("/api/admin/pending-users", isAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/users/pending", isAdmin, async (_req: Request, res: Response) => {
     try {
       const pendingUsers = await storage.getPendingUsers();
       const usersWithoutPasswords = pendingUsers.map(user => {
@@ -208,7 +208,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/admin/approve-user/:id", isAdmin, async (req: Request, res: Response) => {
+  app.post("/api/users/approve/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
@@ -234,7 +234,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/admin/reject-user/:id", isAdmin, async (req: Request, res: Response) => {
+  app.post("/api/users/reject/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
@@ -260,7 +260,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/admin/make-admin/:id", isAdmin, async (req: Request, res: Response) => {
+  app.post("/api/users/make-admin/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
@@ -285,7 +285,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/admin/remove-admin/:id", isAdmin, async (req: Request, res: Response) => {
+  app.post("/api/users/remove-admin/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
@@ -315,7 +315,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.delete("/api/admin/delete-user/:id", isAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/users/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
