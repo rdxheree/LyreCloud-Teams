@@ -58,22 +58,16 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
     setIsRefreshing(true);
     try {
       // First call the special refresh endpoint that rescans NextCloud
-      const response = await apiRequest<{
-        message: string;
-        files: Array<any>;
-        success: boolean;
-      }>({
+      // This does a full rescan of the cdns folder and metadata in NextCloud
+      await apiRequest({
         url: '/api/files/refresh',
         method: 'POST'
       });
       
-      // Log the refresh response
-      console.log('Storage refresh completed:', response);
-      
-      // Then invalidate the cache to make sure the UI updates
+      // Then invalidate the cache to make sure the UI updates with the latest files
       await queryClient.invalidateQueries({ queryKey: ['/api/files'] });
       
-      // Always show a success message
+      // Show a success message
       toast({
         title: "Files refreshed",
         description: "All files have been refreshed from storage",

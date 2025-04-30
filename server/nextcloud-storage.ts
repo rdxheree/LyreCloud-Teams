@@ -1183,18 +1183,17 @@ export class NextCloudStorage implements IStorage {
     const file = this.files.get(id);
     if (!file) return false;
 
-    // Mark as deleted in local database
-    const updatedFile = { ...file, isDeleted: true };
-    this.files.set(id, updatedFile);
-
     // Delete from NextCloud
     try {
       const exists = await this.client.exists(file.path);
       if (exists) {
         await this.client.deleteFile(file.path);
+        console.log(`Deleted file from NextCloud: ${file.path}`);
+      } else {
+        console.log(`File ${file.path} does not exist in NextCloud, skipping physical deletion`);
       }
       
-      // Also try to delete the individual JSON metadata file from the metadata folder
+      // Delete the individual JSON metadata file from the metadata folder
       try {
         const metadataFilename = `${file.filename}.json`;
         const metadataPath = `${this.baseFolder}/metadata/${metadataFilename}`;
@@ -1218,7 +1217,10 @@ export class NextCloudStorage implements IStorage {
         // Continue anyway, not critical
       }
       
-      // Update metadata to remove the deleted file
+      // Remove from our local map completely - don't just mark as deleted
+      this.files.delete(id);
+      
+      // Update global metadata to remove the deleted file
       try {
         await this.saveFileMetadataToNextCloud();
         console.log(`Updated metadata after deleting file: ${file.filename}`);
