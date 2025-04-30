@@ -4,6 +4,8 @@ import path from "path";
 import { createClient, WebDAVClient } from "webdav";
 import { Readable } from "stream";
 import { IStorage } from "./storage";
+import { LogEntry } from "./logger";
+import { NextCloudLogger } from "./nextcloud-logger";
 
 export class NextCloudStorage implements IStorage {
   private users: Map<number, User>;
@@ -13,6 +15,7 @@ export class NextCloudStorage implements IStorage {
   public client: WebDAVClient;
   private baseFolder: string;
   private fileMetadata: Record<string, Partial<File>> | null = null;
+  private logger: NextCloudLogger;
   
   constructor() {
     // Initialize user and file storage in memory
@@ -53,6 +56,9 @@ export class NextCloudStorage implements IStorage {
       password
     });
     
+    // Initialize logger
+    this.logger = new NextCloudLogger(this.client, this.baseFolder);
+    
     // This will be initialized asynchronously
     this.initializeStorage();
   }
@@ -84,6 +90,9 @@ export class NextCloudStorage implements IStorage {
       
       // Then try to ensure the base folder exists
       await this.ensureBaseFolder();
+      
+      // Initialize the logger
+      await this.logger.initialize();
       
       // Load users from NextCloud
       await this.loadUsersFromNextCloud();

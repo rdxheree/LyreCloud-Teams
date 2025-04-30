@@ -9,6 +9,8 @@ import { Readable } from "stream";
 import { NextCloudStorage } from './nextcloud-storage';
 
 // Export the interface for storage implementations
+import { LogEntry } from './logger';
+
 export interface IStorage {
   // User operations
   getUser(id: number): Promise<User | undefined>;
@@ -30,6 +32,10 @@ export interface IStorage {
   // Stream operations for file handling
   createReadStream(filePath: string): Promise<fs.ReadStream | Readable>;
   saveFileFromPath(localPath: string, filename: string): Promise<string>;
+  
+  // Logging operations
+  saveLogs(logs: LogEntry[]): Promise<void>;
+  getLogs(limit?: number, offset?: number, types?: string[]): Promise<LogEntry[]>;
 }
 
 // Ensure uploads directory exists
@@ -46,12 +52,14 @@ try {
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private files: Map<number, File>;
+  private logs: LogEntry[] = [];
   private userCurrentId: number;
   private fileCurrentId: number;
 
   constructor() {
     this.users = new Map();
     this.files = new Map();
+    this.logs = [];
     this.userCurrentId = 1;
     this.fileCurrentId = 1;
   }
@@ -179,6 +187,41 @@ export class MemStorage implements IStorage {
   async saveFileFromPath(localPath: string, filename: string): Promise<string> {
     // For local storage, we simply return the local path since it's already saved
     return localPath;
+  }
+  
+  // Logging operations
+  async saveLogs(logs: LogEntry[]): Promise<void> {
+    this.logs.push(...logs);
+    // In memory implementation, we just store logs in memory
+    // In a real implementation, we would persist them
+    console.log(`Added ${logs.length} log entries. Total logs: ${this.logs.length}`);
+  }
+  
+  async getLogs(limit?: number, offset?: number, types?: string[]): Promise<LogEntry[]> {
+    let filteredLogs = [...this.logs];
+    
+    // Filter by type if specified
+    if (types && types.length > 0) {
+      filteredLogs = filteredLogs.filter(log => 
+        types.includes(log.type)
+      );
+    }
+    
+    // Sort by timestamp (newest first)
+    filteredLogs.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    // Apply pagination
+    if (offset !== undefined) {
+      filteredLogs = filteredLogs.slice(offset);
+    }
+    
+    if (limit !== undefined) {
+      filteredLogs = filteredLogs.slice(0, limit);
+    }
+    
+    return filteredLogs;
   }
 }
 
