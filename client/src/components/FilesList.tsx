@@ -7,7 +7,8 @@ import {
   FileText, 
   Download, 
   Trash2, 
-  CheckSquare 
+  CheckSquare,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { File } from "@shared/schema";
@@ -255,6 +256,16 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
             <h2 className="text-xl font-semibold text-neutral-700">Your Files</h2>
             
             <div className="flex space-x-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/files'] })}
+                title="Refresh file list"
+              >
+                <RefreshCw className="h-5 w-5 mr-1" />
+                Refresh
+              </Button>
+              
               <Button
                 variant="outline"
                 className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
