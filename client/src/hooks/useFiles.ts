@@ -42,7 +42,8 @@ export function useUploadFile() {
         
         xhr.onload = function() {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(JSON.parse(xhr.responseText));
+            const uploadedFile = JSON.parse(xhr.responseText);
+            resolve(uploadedFile);
           } else {
             let errorMessage;
             try {
@@ -62,8 +63,14 @@ export function useUploadFile() {
         xhr.send(formData);
       });
     },
-    onSuccess: () => {
+    onSuccess: (uploadedFile) => {
+      // Immediately update the cache with the new file
+      const currentFiles = queryClient.getQueryData<SchemaFile[]>(['/api/files']) || [];
+      queryClient.setQueryData(['/api/files'], [...currentFiles, uploadedFile]);
+      
+      // Also do a background refresh to ensure everything is synchronized
       queryClient.invalidateQueries({ queryKey: ['/api/files'] });
+      
       toast({
         title: "File uploaded successfully",
         description: "Your file has been uploaded and is ready to share.",

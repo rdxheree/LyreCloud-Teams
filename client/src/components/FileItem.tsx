@@ -84,7 +84,8 @@ export default function FileItem({ file }: FileItemProps) {
   };
 
   // File preview URL for direct linking to the file
-  const previewUrl = `/api/files/${file.id}/download`;
+  // Use CDN endpoint for previews instead of download endpoint
+  const previewUrl = `/cdn/${file.filename}`;
 
   // Render the appropriate preview content based on file type
   const renderPreview = () => {

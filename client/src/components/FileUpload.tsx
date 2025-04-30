@@ -54,7 +54,11 @@ export default function FileUpload() {
                 });
               }
             }, {
-              onSuccess: () => resolve(),
+              onSuccess: (uploadedFile) => {
+                // Log the uploaded file for debugging
+                console.log('File uploaded successfully:', uploadedFile);
+                resolve();
+              },
               onError: (error) => reject(error),
               onSettled: () => {
                 // Clear progress when upload is complete or fails
