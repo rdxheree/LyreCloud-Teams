@@ -355,6 +355,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: 'Failed to delete files' });
     }
   });
+  
+  // ADMIN ONLY - Delete all files (for testing purposes)
+  // NOTE: This must be defined BEFORE the '/api/files/:id' route to avoid route conflicts
+  app.delete('/api/purge-all-files', async (_req: Request, res: Response) => {
+    try {
+      const files = await storage.getFiles();
+      console.log(`Purging all ${files.length} files from system...`);
+      
+      // Process the deletions
+      const results = [];
+      for (const file of files) {
+        try {
+          const success = await storage.deleteFile(file.id);
+          results.push({ id: file.id, success, message: success ? 'Deleted' : 'Failed to delete' });
+        } catch (err) {
+          results.push({ id: file.id, success: false, message: 'Error during deletion' });
+        }
+      }
+      
+      // Clear metadata if NextCloud is being used
+      if (process.env.NEXTCLOUD_URL) {
+        try {
+          // Directly access client if storage is NextCloud
+          const client = (storage as any).client;
+          if (client) {
+            // Try to clear the files.json metadata
+            try {
+              await client.putFileContents('LyreTeams/files.json', JSON.stringify([]));
+              console.log('Cleared files.json metadata');
+            } catch (err) {
+              console.error('Error clearing files.json:', err);
+            }
+            
+            // Try to clear the metadata folder
+            try {
+              const metadataItems = await client.getDirectoryContents('LyreTeams/metadata');
+              for (const item of metadataItems) {
+                if (item.type === 'file') {
+                  try {
+                    await client.deleteFile(item.filename);
+                    console.log(`Deleted metadata file: ${item.basename || item.filename}`);
+                  } catch (deleteErr) {
+                    console.error(`Failed to delete metadata file ${item.filename}:`, deleteErr);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Error clearing metadata folder:', err);
+            }
+          }
+        } catch (err) {
+          console.error('Error accessing NextCloud client:', err);
+        }
+      }
+      
+      res.status(200).json({ 
+        message: 'Purge operation completed', 
+        totalFiles: files.length,
+        results
+      });
+    } catch (error) {
+      console.error('Error purging all files:', error);
+      res.status(500).json({ message: 'Internal server error while purging files' });
+    }
+  });
 
   // Delete a file
   app.delete('/api/files/:id', async (req: Request, res: Response) => {
