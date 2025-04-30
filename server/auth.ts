@@ -92,33 +92,55 @@ export function setupAuth(app: Express) {
   // Authentication routes
   app.post("/api/register", async (req: Request, res: Response) => {
     try {
+      console.log("Registration request received:", req.body.username);
       const { username, password } = req.body;
+      
+      if (!username || !password) {
+        console.log("Registration failed: Missing username or password");
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      // Protect the permanent admin account
+      if (username.toLowerCase() === 'rdxhere.exe') {
+        console.log("Registration attempt with reserved username 'rdxhere.exe'");
+        return res.status(403).json({ message: "This username is reserved" });
+      }
       
       // Check if user already exists
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
+        console.log(`Registration failed: Username ${username} already exists`);
         return res.status(400).json({ message: "Username already exists" });
       }
       
-      // Hash password and create user
-      const hashedPassword = await hashPassword(password);
-      const newUser = await storage.createUser({
-        username,
-        password: hashedPassword,
-        role: "user",
-        status: "pending",
-        isApproved: false
-      });
+      console.log(`Creating new user: ${username} with role 'user' and status 'pending'`);
       
-      // Don't include password in response
-      const { password: _, ...userWithoutPassword } = newUser;
-      
-      res.status(201).json({ 
-        message: "Registration successful. Your account is pending admin approval." 
-      });
-    } catch (error) {
+      try {
+        // Hash password and create user
+        const hashedPassword = await hashPassword(password);
+        const newUser = await storage.createUser({
+          username,
+          password: hashedPassword,
+          role: "user",
+          status: "pending",
+          isApproved: false
+        });
+        
+        // Don't include password in response
+        const { password: _, ...userWithoutPassword } = newUser;
+        
+        console.log(`User ${username} registered successfully with ID ${newUser.id}`);
+        
+        res.status(201).json({ 
+          message: "Registration successful. Your account is pending admin approval." 
+        });
+      } catch (createError: any) {
+        console.error(`Failed to create user ${username}:`, createError);
+        res.status(500).json({ message: `User creation failed: ${createError.message || 'Unknown error'}` });
+      }
+    } catch (error: any) {
       console.error("Registration error:", error);
-      res.status(500).json({ message: "Error creating user" });
+      res.status(500).json({ message: `Error creating user: ${error.message || 'Unknown error'}` });
     }
   });
 

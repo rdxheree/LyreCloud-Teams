@@ -236,6 +236,8 @@ export class NextCloudStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.userCurrentId++;
+    
+    // Create a complete user object with required fields
     const user: User = { 
       ...insertUser, 
       id,
@@ -243,10 +245,24 @@ export class NextCloudStorage implements IStorage {
       isApproved: insertUser.isApproved !== undefined ? insertUser.isApproved : false,
       status: insertUser.status || 'pending'
     };
+    
+    console.log(`Creating new user: ${user.username} with role ${user.role} and status ${user.status}`);
+    
+    // Add user to the map
     this.users.set(id, user);
     
-    // Save to NextCloud
-    await this.saveUsersToNextCloud();
+    // Log all users before saving
+    const allUsers = Array.from(this.users.values());
+    console.log(`Current users (${allUsers.length}) before saving:`, allUsers.map(u => `${u.username} (${u.role})`));
+    
+    // Save to NextCloud with retry logic
+    try {
+      await this.saveUsersToNextCloud();
+      console.log(`Successfully saved user ${user.username} to NextCloud`);
+    } catch (error: any) {
+      console.error(`Error saving new user ${user.username} to NextCloud:`, error);
+      throw new Error(`Failed to persist user to NextCloud: ${error.message || 'Unknown error'}`);
+    }
     
     return user;
   }
@@ -351,12 +367,16 @@ export class NextCloudStorage implements IStorage {
       // Path for users file in NextCloud
       const usersFilePath = `${this.baseFolder}/users.json`;
       
-      // Check if file exists
+      console.log(`Attempting to load users from ${usersFilePath}`);
+      
+      // Check if file exists with better error handling
       let exists = false;
       try {
         exists = await this.client.exists(usersFilePath);
+        console.log(`Users file exists in NextCloud: ${exists}`);
       } catch (existsError) {
-        console.warn('Error checking if users.json exists, will create it:', existsError);
+        console.warn('Error checking if users.json exists:', existsError);
+        // Continue with assumption that file doesn't exist
       }
       
       if (!exists) {
@@ -381,22 +401,36 @@ export class NextCloudStorage implements IStorage {
         return;
       }
       
-      // Read file content
+      // Read file content with better error handling
       let fileContent;
       try {
+        console.log('Reading users.json content from NextCloud...');
         fileContent = await this.client.getFileContents(usersFilePath, { format: 'text' });
+        console.log('Successfully read users.json file');
       } catch (readError) {
         console.error('Error reading users.json from NextCloud:', readError);
         throw new Error('Failed to read users file from NextCloud');
       }
       
       if (typeof fileContent !== 'string') {
+        console.error('Unexpected file content format:', typeof fileContent);
         throw new Error('Unexpected file content format');
       }
       
+      // Log the raw content for debugging
+      console.log('Raw users.json content:', fileContent);
+      
       try {
+        // Parse JSON with validation
+        if (!fileContent.trim()) {
+          console.error('Empty users.json file');
+          throw new Error('Empty users file');
+        }
+        
         // Parse JSON
         const usersArray = JSON.parse(fileContent) as User[];
+        console.log(`Parsed users from JSON, found ${usersArray.length} users:`, 
+          usersArray.map(u => `${u.username} (${u.role})`).join(', '));
         
         // Find max ID to determine next ID
         let maxId = 0;
@@ -406,14 +440,21 @@ export class NextCloudStorage implements IStorage {
         
         // Add users to Map
         for (const user of usersArray) {
+          // Make sure user has required fields
+          if (!user.id || !user.username || !user.password) {
+            console.warn(`Skipping invalid user record:`, user);
+            continue;
+          }
+          
           this.users.set(user.id, user);
           maxId = Math.max(maxId, user.id);
+          console.log(`Added user from NextCloud: ${user.username} (${user.role})`);
         }
         
         // Update current ID
         this.userCurrentId = maxId + 1;
         
-        console.log(`Loaded ${usersArray.length} users from NextCloud`);
+        console.log(`Loaded ${this.users.size} users from NextCloud`);
         
         // Check if admin exists, create one if not
         const adminUser = Array.from(this.users.values()).find(u => u.username === 'rdxhere.exe');
@@ -423,7 +464,7 @@ export class NextCloudStorage implements IStorage {
           
           // Create default admin user
           // Note: We're not hashing this password here because it should be hashed by auth.ts setupDefaultAdmin
-          const adminUser: User = {
+          const newAdminUser: User = {
             id: this.userCurrentId++,
             username: 'rdxhere.exe',
             password: 'rdxpass', // Will be properly hashed by auth.ts
@@ -432,15 +473,20 @@ export class NextCloudStorage implements IStorage {
             isApproved: true
           };
           
-          this.users.set(adminUser.id, adminUser);
+          this.users.set(newAdminUser.id, newAdminUser);
           
           // Save updated users to NextCloud
           await this.saveUsersToNextCloud();
           console.log('Restored default admin user: rdxhere.exe');
+        } else if (adminUser && adminUser.role !== 'admin') {
+          // Fix role if it's wrong
+          adminUser.role = 'admin';
+          console.log(`Fixed admin role for ${adminUser.username}`);
+          await this.saveUsersToNextCloud();
         }
-      } catch (parseError) {
+      } catch (parseError: any) {
         console.error('Error parsing users JSON from NextCloud:', parseError);
-        throw new Error('Invalid users file format in NextCloud');
+        throw new Error(`Invalid users file format in NextCloud: ${parseError.message || 'Unknown error'}`);
       }
     } catch (error: any) {
       console.error('Error loading users from NextCloud:', error);
