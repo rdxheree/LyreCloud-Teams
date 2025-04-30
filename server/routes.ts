@@ -68,6 +68,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: 'Failed to fetch files' });
     }
   });
+  
+  // Force refresh files from NextCloud storage
+  app.post('/api/files/refresh', async (_req: Request, res: Response) => {
+    try {
+      // Only do a full refresh if we're using NextCloud
+      if ((storage as any).client) {
+        try {
+          console.log('Performing full storage refresh from NextCloud');
+          
+          // This is a special case where we need to access internal methods of the NextCloud storage
+          // Force rescan all files from the cdns folder and metadata
+          await (storage as any).scanFilesFromNextCloud();
+          
+          // Verify storage consistency
+          await (storage as any).verifyStorageConsistency();
+          
+          // Save updated metadata back to NextCloud
+          await (storage as any).saveFileMetadataToNextCloud();
+          
+          console.log('Full NextCloud storage refresh completed');
+          
+          // Get the updated files list
+          const refreshedFiles = await storage.getFiles();
+          return res.json({ 
+            message: 'Storage refreshed successfully', 
+            files: refreshedFiles,
+            success: true
+          });
+        } catch (refreshError) {
+          console.error('Error during full NextCloud refresh:', refreshError);
+          throw refreshError; // Re-throw to be caught by the outer try/catch
+        }
+      } else {
+        // For memory storage, simply return the current files
+        const files = await storage.getFiles();
+        return res.json({ 
+          message: 'Files retrieved from storage', 
+          files,
+          success: true
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing files from storage:', error);
+      return res.status(500).json({ 
+        message: 'Failed to refresh files from storage',
+        success: false
+      });
+    }
+  });
 
   // Get a single file
   app.get('/api/files/:id', async (req: Request, res: Response) => {

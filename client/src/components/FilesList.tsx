@@ -51,19 +51,47 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Refresh files function
+  // Refresh files function - does a full rescan of NextCloud storage
   const refreshFiles = useCallback(async () => {
     if (isRefreshing) return;
     
     setIsRefreshing(true);
     try {
+      // First call the special refresh endpoint that rescans NextCloud
+      const response = await apiRequest<{
+        message: string;
+        files: Array<any>;
+        success: boolean;
+      }>({
+        url: '/api/files/refresh',
+        method: 'POST'
+      });
+      
+      // Log the refresh response
+      console.log('Storage refresh completed:', response);
+      
+      // Then invalidate the cache to make sure the UI updates
       await queryClient.invalidateQueries({ queryKey: ['/api/files'] });
+      
+      // Always show a success message
+      toast({
+        title: "Files refreshed",
+        description: "All files have been refreshed from storage",
+      });
+      
       // Wait for at least 500ms to show the animation
       await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (error) {
+      console.error('Error refreshing files:', error);
+      toast({
+        title: "Refresh failed",
+        description: "There was a problem refreshing files from storage",
+        variant: "destructive",
+      });
     } finally {
       setIsRefreshing(false);
     }
-  }, [queryClient, isRefreshing]);
+  }, [queryClient, isRefreshing, toast]);
   
   // Refresh files only when component mounts
   useEffect(() => {
