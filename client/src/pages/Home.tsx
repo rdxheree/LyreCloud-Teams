@@ -62,6 +62,7 @@ function HomeContent() {
       <FilesList files={files || []} isLoading={isLoading} error={error} />
       
       {isDeleteModalOpen && <DeleteConfirmationModal />}
+      {isRenameModalOpen && <RenameFileModal getFileName={getFileName} />}
     </>
   );
 }
