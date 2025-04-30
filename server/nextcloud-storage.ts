@@ -226,6 +226,75 @@ export class NextCloudStorage implements IStorage {
         console.error("Error checking/loading file metadata:", error);
       }
       
+      // Try to load individual metadata files from the metadata folder
+      try {
+        const metadataFolder = `${this.baseFolder}/metadata`;
+        const folderExists = await this.client.exists(metadataFolder);
+        
+        if (folderExists) {
+          console.log(`Looking for individual metadata files in ${metadataFolder}`);
+          const metadataContents = await this.client.getDirectoryContents(metadataFolder);
+          
+          // Convert to array if it's not already
+          const contentArray = Array.isArray(metadataContents) ? metadataContents : 'data' in metadataContents ? metadataContents.data : [];
+          
+          console.log(`Found ${contentArray.length} items in metadata folder`);
+          
+          // Load each metadata file
+          for (const item of contentArray) {
+            if (item.type === 'directory' || !item.basename.endsWith('.json')) continue;
+            
+            try {
+              const metadataFilePath = `${metadataFolder}/${item.basename}`;
+              const jsonContent = await this.client.getFileContents(metadataFilePath, { format: 'text' });
+              
+              if (jsonContent && typeof jsonContent === 'string') {
+                try {
+                  const fileInfo = JSON.parse(jsonContent);
+                  const originalFilename = fileInfo.system_filename;
+                  
+                  if (originalFilename) {
+                    // This ensures we have a key in the metadata object for this file
+                    if (!fileMetadata[originalFilename]) {
+                      fileMetadata[originalFilename] = {};
+                    }
+                    
+                    // Ensure we preserve the uploadedBy information
+                    if (fileInfo.uploaded_by) {
+                      fileMetadata[originalFilename].uploadedBy = fileInfo.uploaded_by;
+                      console.log(`Loaded uploadedBy information for ${originalFilename}: ${fileInfo.uploaded_by}`);
+                    }
+                    
+                    // Convert the string date back to a Date object if needed
+                    if (fileInfo.uploaded_on) {
+                      try {
+                        // Extract the date component from the IST formatted string
+                        const dateMatch = fileInfo.uploaded_on.match(/([A-Za-z]+ \d+, \d{4})/);
+                        const timeMatch = fileInfo.uploaded_on.match(/(\d{1,2}:\d{2}:\d{2})/);
+                        
+                        if (dateMatch && dateMatch[1] && timeMatch && timeMatch[1]) {
+                          const dateStr = `${dateMatch[1]} ${timeMatch[1]}`;
+                          fileMetadata[originalFilename].uploadedAt = new Date(dateStr);
+                          console.log(`Loaded upload date for ${originalFilename}: ${fileMetadata[originalFilename].uploadedAt}`);
+                        }
+                      } catch (dateError) {
+                        console.error(`Error parsing date from metadata for ${originalFilename}:`, dateError);
+                      }
+                    }
+                  }
+                } catch (jsonError) {
+                  console.error(`Error parsing metadata file ${item.basename}:`, jsonError);
+                }
+              }
+            } catch (fileError) {
+              console.error(`Error reading metadata file ${item.basename}:`, fileError);
+            }
+          }
+        }
+      } catch (metadataFolderError) {
+        console.error("Error loading metadata from individual files:", metadataFolderError);
+      }
+      
       // Store the metadata to apply during scan
       this.fileMetadata = fileMetadata;
     } catch (error) {
