@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Download, Trash2, Expand, Minimize } from "lucide-react";
+import { Copy, Download, Trash2, Expand, Minimize, PenLine, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -7,6 +7,7 @@ import { File } from "@shared/schema";
 import { useFileContext } from "@/contexts/FileContext";
 import { getFileTypeInfo, formatFileSize, formatUploadDate } from "@/lib/fileTypes";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface FileItemProps {
   file: File;
@@ -14,10 +15,20 @@ interface FileItemProps {
 
 export default function FileItem({ file }: FileItemProps) {
   const { toast } = useToast();
-  const { setSelectedFileId, setIsDeleteModalOpen } = useFileContext();
+  const { 
+    setSelectedFileId, 
+    setIsDeleteModalOpen, 
+    setIsRenameModalOpen, 
+    setFileToRename,
+    isMultiSelectMode,
+    selectedFileIds,
+    toggleFileSelection
+  } = useFileContext();
+  
   const fileTypeInfo = getFileTypeInfo(file.mimeType);
   const { icon: FileTypeIcon, bgColor, iconColor } = fileTypeInfo;
   const isPreviewable = file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/') || file.mimeType.startsWith('audio/');
+  const isSelected = selectedFileIds.includes(file.id);
 
   const handleCopyLink = () => {
     // Create the CDN link in the format: <current-domain>/cdn/<filename>
@@ -60,6 +71,16 @@ export default function FileItem({ file }: FileItemProps) {
   const handleDelete = () => {
     setSelectedFileId(file.id);
     setIsDeleteModalOpen(true);
+  };
+  
+  const handleRename = () => {
+    setFileToRename(file.id);
+    setIsRenameModalOpen(true);
+  };
+  
+  const handleToggleSelect = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleFileSelection(file.id);
   };
 
   // File preview URL for direct linking to the file
@@ -107,8 +128,31 @@ export default function FileItem({ file }: FileItemProps) {
   };
 
   return (
-    <div className="soft-element p-4 rounded-xl w-full overflow-hidden">
+    <div className={cn(
+      "soft-element p-4 rounded-xl w-full overflow-hidden",
+      isMultiSelectMode && isSelected && "border-2 border-primary bg-primary/5"
+    )}>
       <div className="flex flex-col md:flex-row w-full">
+        {/* Select checkbox for multi-select mode */}
+        {isMultiSelectMode && (
+          <div className="pr-3 pt-1">
+            <button 
+              type="button"
+              onClick={handleToggleSelect}
+              className="text-neutral-600 hover:text-primary focus:outline-none"
+            >
+              {isSelected ? (
+                <CheckSquare className="h-6 w-6 text-primary" />
+              ) : (
+                <Square className="h-6 w-6" />
+              )}
+              <span className="sr-only">
+                {isSelected ? "Deselect file" : "Select file"}
+              </span>
+            </button>
+          </div>
+        )}
+      
         {/* File Preview */}
         {renderPreview()}
         
@@ -135,64 +179,85 @@ export default function FileItem({ file }: FileItemProps) {
             )}
           </div>
           
-          <div className="flex mt-4 md:mt-0 space-x-2 md:justify-end items-start">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
-                    onClick={handleCopyLink}
-                  >
-                    <Copy className="h-5 w-5" />
-                    <span className="sr-only">Copy Link</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Copy Link</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
-                    onClick={handleDownload}
-                  >
-                    <Download className="h-5 w-5" />
-                    <span className="sr-only">Download</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Download</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="soft-button p-2 rounded-lg text-neutral-600 hover:text-red-500"
-                    onClick={handleDelete}
-                  >
-                    <Trash2 className="h-5 w-5" />
-                    <span className="sr-only">Delete</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Delete</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
+          {!isMultiSelectMode && (
+            <div className="flex mt-4 md:mt-0 space-x-2 md:justify-end items-start">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
+                      onClick={handleCopyLink}
+                    >
+                      <Copy className="h-5 w-5" />
+                      <span className="sr-only">Copy Link</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Copy Link</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
+                      onClick={handleRename}
+                    >
+                      <PenLine className="h-5 w-5" />
+                      <span className="sr-only">Rename</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Rename</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="soft-button p-2 rounded-lg text-neutral-600 hover:text-primary"
+                      onClick={handleDownload}
+                    >
+                      <Download className="h-5 w-5" />
+                      <span className="sr-only">Download</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Download</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="soft-button p-2 rounded-lg text-neutral-600 hover:text-red-500"
+                      onClick={handleDelete}
+                    >
+                      <Trash2 className="h-5 w-5" />
+                      <span className="sr-only">Delete</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Delete</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
         </div>
       </div>
     </div>

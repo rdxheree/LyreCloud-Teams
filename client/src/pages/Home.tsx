@@ -4,15 +4,23 @@ import FileUpload from "@/components/FileUpload";
 import UploadProgress from "@/components/UploadProgress";
 import FilesList from "@/components/FilesList";
 import DeleteConfirmationModal from "@/components/DeleteConfirmationModal";
+import RenameFileModal from "@/components/RenameFileModal";
 import MessageEmbed from "@/components/MessageEmbed";
 import { useFileContext } from "@/contexts/FileContext";
 import { useGetFiles } from "@/hooks/useFiles";
 import { File as SchemaFile } from "@shared/schema";
 
 function HomeContent() {
-  const { currentProgress, isDeleteModalOpen } = useFileContext();
+  const { currentProgress, isDeleteModalOpen, isRenameModalOpen } = useFileContext();
   const { data: files, isLoading, error } = useGetFiles();
   const [showEmbed, setShowEmbed] = useState(true);
+  
+  // Function to get a file name by ID
+  const getFileName = (id: number) => {
+    if (!files) return undefined;
+    const file = files.find(f => f.id === id);
+    return file?.originalFilename;
+  };
   
   return (
     <>

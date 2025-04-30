@@ -1,10 +1,24 @@
-import { useState } from "react";
-import { SlidersHorizontal, Filter, ArrowUpDown, Calendar, FileText } from "lucide-react";
+import { useState, useCallback } from "react";
+import { 
+  SlidersHorizontal, 
+  Filter, 
+  ArrowUpDown, 
+  Calendar, 
+  FileText, 
+  Download, 
+  Trash2, 
+  CheckSquare 
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { File } from "@shared/schema";
 import FileItem from "@/components/FileItem";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useFileContext } from "@/contexts/FileContext";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
+import RenameFileModal from "./RenameFileModal";
 
 interface FilesListProps {
   files: File[];
@@ -20,6 +34,20 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
   const [sortBy, setSortBy] = useState<SortBy>("date");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [fileType, setFileType] = useState<FileType>("all");
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [isDownloadLoading, setIsDownloadLoading] = useState(false);
+  
+  const { 
+    selectedFileIds, 
+    isMultiSelectMode, 
+    setMultiSelectMode, 
+    clearSelectedFiles, 
+    setIsRenameModalOpen,
+    setFileToRename
+  } = useFileContext();
+  
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Sort files based on current sort criteria
   const sortedFiles = [...files].sort((a, b) => {
@@ -70,6 +98,12 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
     }
   });
   
+  // Get file name for a given ID
+  const getFileName = useCallback((id: number) => {
+    const file = files.find(file => file.id === id);
+    return file?.originalFilename;
+  }, [files]);
+
   // Toggle sort order and potentially change sort by
   const handleSort = (by: SortBy) => {
     if (sortBy === by) {
@@ -82,70 +116,214 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
     }
   };
   
+  // Delete multiple files
+  const handleBatchDelete = async () => {
+    if (selectedFileIds.length === 0) return;
+    
+    setIsDeleteLoading(true);
+    try {
+      const response = await apiRequest<{
+        message: string;
+        results: Array<{ id: number; success: boolean; message?: string }>;
+      }>({
+        url: '/api/files/delete-multiple',
+        method: 'POST',
+        data: {
+          ids: selectedFileIds
+        }
+      });
+      
+      // Check results
+      const { results } = response;
+      const successCount = results ? results.filter((r) => r.success).length : 0;
+      
+      // Update the files list
+      queryClient.invalidateQueries({ queryKey: ['/api/files'] });
+      
+      // Show success message
+      toast({
+        title: `${successCount} ${successCount === 1 ? 'file' : 'files'} deleted`,
+        description: successCount < selectedFileIds.length 
+          ? `${selectedFileIds.length - successCount} files could not be deleted.`
+          : "Files were successfully deleted.",
+      });
+      
+      // Exit multi-select mode
+      setMultiSelectMode(false);
+      clearSelectedFiles();
+    } catch (error) {
+      console.error('Error deleting files:', error);
+      toast({
+        title: "Error deleting files",
+        description: "There was a problem deleting the selected files.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleteLoading(false);
+    }
+  };
+  
+  // Download multiple files
+  const handleBatchDownload = () => {
+    if (selectedFileIds.length === 0) return;
+    
+    setIsDownloadLoading(true);
+    
+    // Create a download link for each file and click it
+    try {
+      selectedFileIds.forEach(id => {
+        const file = files.find(f => f.id === id);
+        if (!file) return;
+        
+        const downloadUrl = `/api/files/${id}/download`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = file.originalFilename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+      
+      toast({
+        title: "Downloads started",
+        description: `Downloading ${selectedFileIds.length} ${selectedFileIds.length === 1 ? 'file' : 'files'}`,
+      });
+      
+      // Exit multi-select mode after a delay
+      setTimeout(() => {
+        setMultiSelectMode(false);
+        clearSelectedFiles();
+        setIsDownloadLoading(false);
+      }, 1000);
+    } catch (error) {
+      console.error('Error downloading files:', error);
+      toast({
+        title: "Error downloading files",
+        description: "There was a problem downloading the selected files.",
+        variant: "destructive",
+      });
+      setIsDownloadLoading(false);
+    }
+  };
+  
   return (
     <section className="w-full overflow-hidden">
       <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-        <h2 className="text-xl font-semibold text-neutral-700">Your Files</h2>
-        
-        <div className="flex space-x-2 flex-shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
+        {isMultiSelectMode ? (
+          <>
+            <div className="flex items-center">
+              <h2 className="text-xl font-semibold text-neutral-700 mr-2">
+                {selectedFileIds.length} {selectedFileIds.length === 1 ? 'file' : 'files'} selected
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setMultiSelectMode(false);
+                  clearSelectedFiles();
+                }}
+                className="text-neutral-500 hover:text-neutral-700"
               >
-                <SlidersHorizontal className="h-5 w-5 mr-1" />
-                Sort
+                Cancel
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="soft-element-inner">
-              <DropdownMenuItem onClick={() => handleSort("name")} className="cursor-pointer">
-                <FileText className="h-4 w-4 mr-2" />
-                Name {sortBy === "name" && <ArrowUpDown className="h-4 w-4 ml-1" />}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSort("date")} className="cursor-pointer">
-                <Calendar className="h-4 w-4 mr-2" />
-                Date {sortBy === "date" && <ArrowUpDown className="h-4 w-4 ml-1" />}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSort("size")} className="cursor-pointer">
-                <SlidersHorizontal className="h-4 w-4 mr-2" />
-                Size {sortBy === "size" && <ArrowUpDown className="h-4 w-4 ml-1" />}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
+            </div>
+            
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                className="soft-button bg-primary px-4 py-2 rounded-full text-white font-medium flex items-center"
+                onClick={handleBatchDownload}
+                disabled={selectedFileIds.length === 0 || isDownloadLoading}
               >
-                <Filter className="h-5 w-5 mr-1" />
-                Filter
+                <Download className="h-5 w-5 mr-1" />
+                {isDownloadLoading ? 'Downloading...' : 'Download'}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="soft-element-inner">
-              <DropdownMenuItem onClick={() => setFileType("all")} className="cursor-pointer">
-                All Files {fileType === "all" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFileType("image")} className="cursor-pointer">
-                Images {fileType === "image" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFileType("document")} className="cursor-pointer">
-                Documents {fileType === "document" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFileType("video")} className="cursor-pointer">
-                Videos {fileType === "video" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFileType("audio")} className="cursor-pointer">
-                Audio {fileType === "audio" && "✓"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFileType("other")} className="cursor-pointer">
-                Other {fileType === "other" && "✓"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+              
+              <Button
+                variant="outline"
+                className="soft-button bg-red-500 px-4 py-2 rounded-full text-white font-medium flex items-center"
+                onClick={handleBatchDelete}
+                disabled={selectedFileIds.length === 0 || isDeleteLoading}
+              >
+                <Trash2 className="h-5 w-5 mr-1" />
+                {isDeleteLoading ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-xl font-semibold text-neutral-700">Your Files</h2>
+            
+            <div className="flex space-x-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
+                onClick={() => setMultiSelectMode(true)}
+              >
+                <CheckSquare className="h-5 w-5 mr-1" />
+                Select
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
+                  >
+                    <SlidersHorizontal className="h-5 w-5 mr-1" />
+                    Sort
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="soft-element-inner">
+                  <DropdownMenuItem onClick={() => handleSort("name")} className="cursor-pointer">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Name {sortBy === "name" && <ArrowUpDown className="h-4 w-4 ml-1" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSort("date")} className="cursor-pointer">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Date {sortBy === "date" && <ArrowUpDown className="h-4 w-4 ml-1" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSort("size")} className="cursor-pointer">
+                    <SlidersHorizontal className="h-4 w-4 mr-2" />
+                    Size {sortBy === "size" && <ArrowUpDown className="h-4 w-4 ml-1" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
+                  >
+                    <Filter className="h-5 w-5 mr-1" />
+                    Filter
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="soft-element-inner">
+                  <DropdownMenuItem onClick={() => setFileType("all")} className="cursor-pointer">
+                    All Files {fileType === "all" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFileType("image")} className="cursor-pointer">
+                    Images {fileType === "image" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFileType("document")} className="cursor-pointer">
+                    Documents {fileType === "document" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFileType("video")} className="cursor-pointer">
+                    Videos {fileType === "video" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFileType("audio")} className="cursor-pointer">
+                    Audio {fileType === "audio" && "✓"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFileType("other")} className="cursor-pointer">
+                    Other {fileType === "other" && "✓"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </>
+        )}
       </div>
       
       {isLoading ? (
