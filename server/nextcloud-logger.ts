@@ -102,7 +102,10 @@ export class NextCloudLogger {
           
           // Keep only the most recent 5 backups to avoid filling the storage
           const dirContents = await this.client.getDirectoryContents(logsDir);
-          const backups = dirContents
+          // Convert dirContents to array if needed
+          const contentArray = Array.isArray(dirContents) ? dirContents : 'data' in dirContents ? dirContents.data : [];
+          
+          const backups = contentArray
             .filter((item: any) => 
               typeof item.basename === 'string' && 
               item.basename.startsWith('logs_backup_') && 

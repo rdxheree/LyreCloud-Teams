@@ -1,5 +1,10 @@
-import { storage } from './storage';
+import { nanoid } from "nanoid";
+import { storage } from "./storage";
 
+/**
+ * Enum for different log types
+ * This helps categorize logs for filtering and display
+ */
 export enum LogType {
   USER_REGISTER = 'USER_REGISTER',
   USER_LOGIN = 'USER_LOGIN',
@@ -18,6 +23,9 @@ export enum LogType {
   SYSTEM = 'SYSTEM',
 }
 
+/**
+ * Interface for log entries
+ */
 export interface LogEntry {
   id: string;
   type: LogType;
@@ -33,15 +41,10 @@ export interface LogEntry {
 export async function createLog(
   type: LogType,
   message: string,
-  username: string = 'system',
+  username: string = "system",
   details?: Record<string, any>
-): Promise<void> {
+): Promise<LogEntry> {
   try {
-    if (!storage.saveLogs) {
-      console.warn('Logging attempted but storage doesn\'t support logs');
-      return;
-    }
-    
     const logEntry: LogEntry = {
       id: generateId(),
       type,
@@ -51,10 +54,15 @@ export async function createLog(
       details
     };
     
+    // Save to storage
     await storage.saveLogs([logEntry]);
+    
     console.log(`Log created: [${type}] ${message} by ${username}`);
+    
+    return logEntry;
   } catch (error) {
-    console.error('Failed to create log entry:', error);
+    console.error('Error creating log entry:', error);
+    throw error;
   }
 }
 
@@ -62,47 +70,9 @@ export async function createLog(
  * Generate a simple ID for log entries
  */
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+  return nanoid(8);
 }
 
-// Helper functions for common log types
 export const logger = {
-  userRegister: (username: string) => 
-    createLog(LogType.USER_REGISTER, `User ${username} registered`, username),
-  
-  userLogin: (username: string) => 
-    createLog(LogType.USER_LOGIN, `User ${username} logged in`, username),
-  
-  userLogout: (username: string) => 
-    createLog(LogType.USER_LOGOUT, `User ${username} logged out`, username),
-  
-  userDelete: (username: string, deletedBy: string) => 
-    createLog(LogType.USER_DELETE, `User ${username} was deleted`, deletedBy, { deletedUser: username }),
-  
-  userAdmin: (username: string, actionBy: string) => 
-    createLog(LogType.USER_ADMIN, `User ${username} was given admin rights`, actionBy, { targetUser: username }),
-  
-  userAdminRemove: (username: string, actionBy: string) => 
-    createLog(LogType.USER_ADMIN_REMOVE, `Admin rights were removed from user ${username}`, actionBy, { targetUser: username }),
-  
-  userApprove: (username: string, actionBy: string) => 
-    createLog(LogType.USER_APPROVE, `User ${username} was approved`, actionBy, { targetUser: username }),
-  
-  userReject: (username: string, actionBy: string) => 
-    createLog(LogType.USER_REJECT, `User ${username} was rejected`, actionBy, { targetUser: username }),
-  
-  fileUpload: (filename: string, username: string) => 
-    createLog(LogType.FILE_UPLOAD, `File ${filename} was uploaded`, username, { filename }),
-  
-  fileDelete: (filename: string, username: string) => 
-    createLog(LogType.FILE_DELETE, `File ${filename} was deleted`, username, { filename }),
-  
-  fileRename: (oldName: string, newName: string, username: string) => 
-    createLog(LogType.FILE_RENAME, `File ${oldName} was renamed to ${newName}`, username, { oldName, newName }),
-  
-  fileDownload: (filename: string, username: string) => 
-    createLog(LogType.FILE_DOWNLOAD, `File ${filename} was downloaded`, username, { filename }),
-  
-  system: (message: string) => 
-    createLog(LogType.SYSTEM, message, 'system'),
+  createLog,
 };

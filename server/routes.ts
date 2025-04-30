@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import { insertFileSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { setupAuth } from "./auth";
+import { createLog, LogType } from "./logger";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -58,6 +59,20 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
   setupAuth(app);
+  
+  // Function to check if user is admin
+  function isAdmin(req: Request, res: Response, next: NextFunction) {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+    
+    const user = req.user as any;
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    
+    next();
+  }
   // Get all files
   app.get('/api/files', async (_req: Request, res: Response) => {
     try {
@@ -503,6 +518,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Serve the file
     res.sendFile(filePath);
+  });
+
+  // Get logs (admin only)
+  app.get('/api/logs', isAdmin, async (req: Request, res: Response) => {
+    try {
+      // Parse query parameters
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      let types: string[] | undefined = undefined;
+      
+      if (req.query.types) {
+        // Handle both single type and array of types
+        if (Array.isArray(req.query.types)) {
+          types = req.query.types as string[];
+        } else {
+          types = [req.query.types as string];
+        }
+      }
+      
+      // Get logs from storage
+      const logs = await storage.getLogs(limit, offset, types);
+      
+      return res.json({
+        logs,
+        meta: {
+          limit,
+          offset,
+          types,
+          count: logs.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+      return res.status(500).json({ 
+        message: 'Failed to fetch logs',
+        success: false
+      });
+    }
+  });
+  
+  // Create logs endpoint for system to use
+  app.post('/api/logs', async (req: Request, res: Response) => {
+    try {
+      // Get username from authenticated user, if available
+      let username = "system";
+      if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+        username = (req.user as any).username || "system";
+      }
+      
+      // Validate log entry data
+      const { type, message, details } = req.body;
+      
+      if (!type || !message) {
+        return res.status(400).json({ 
+          message: 'Missing required fields: type, message',
+          success: false
+        });
+      }
+      
+      // Create log entry
+      await createLog(type, message, username, details);
+      
+      return res.status(201).json({
+        message: 'Log entry created successfully',
+        success: true
+      });
+    } catch (error) {
+      console.error('Error creating log entry:', error);
+      return res.status(500).json({ 
+        message: 'Failed to create log entry',
+        success: false
+      });
+    }
   });
 
   const httpServer = createServer(app);

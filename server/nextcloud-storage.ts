@@ -332,7 +332,7 @@ export class NextCloudStorage implements IStorage {
       const metadata: Record<string, Partial<File>> = {};
       
       // Add all existing files to the metadata
-      for (const file of this.files.values()) {
+      Array.from(this.files.values()).forEach(file => {
         if (!file.isDeleted) {
           // Only save relevant metadata
           metadata[file.filename] = {
@@ -343,7 +343,7 @@ export class NextCloudStorage implements IStorage {
           
           console.log(`Saving metadata for file ${file.filename}: uploadedBy=${file.uploadedBy || "system"}`);
         }
-      }
+      });
       
       // Convert to JSON
       const jsonContent = JSON.stringify(metadata, null, 2);
@@ -1272,6 +1272,25 @@ export class NextCloudStorage implements IStorage {
     } catch (error: any) {
       console.error(`Error saving file to NextCloud: ${error.message || 'Unknown error'}`);
       throw new Error(`Failed to save file to NextCloud: ${error.message || 'Unknown error'}`);
+    }
+  }
+  
+  // Logging operations
+  async saveLogs(logs: LogEntry[]): Promise<void> {
+    try {
+      await this.logger.addLogs(logs);
+      console.log(`Added ${logs.length} log entries to NextCloud storage`);
+    } catch (error) {
+      console.error('Error saving logs to NextCloud:', error);
+    }
+  }
+  
+  async getLogs(limit?: number, offset?: number, types?: string[]): Promise<LogEntry[]> {
+    try {
+      return await this.logger.getLogs(limit, offset, types);
+    } catch (error) {
+      console.error('Error getting logs from NextCloud:', error);
+      return [];
     }
   }
 }
