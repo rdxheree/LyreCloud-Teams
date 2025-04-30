@@ -46,7 +46,6 @@ import {
   Search,
   Filter
 } from "lucide-react";
-import { LogType } from "@/types/logs";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -55,6 +54,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// Log type enum
+enum LogType {
+  USER_REGISTER = 'USER_REGISTER',
+  USER_LOGIN = 'USER_LOGIN',
+  USER_LOGOUT = 'USER_LOGOUT',
+  USER_DELETE = 'USER_DELETE',
+  USER_ADMIN = 'USER_ADMIN',
+  USER_ADMIN_REMOVE = 'USER_ADMIN_REMOVE',
+  USER_APPROVE = 'USER_APPROVE',
+  USER_REJECT = 'USER_REJECT',
+  
+  FILE_UPLOAD = 'FILE_UPLOAD',
+  FILE_DELETE = 'FILE_DELETE',
+  FILE_RENAME = 'FILE_RENAME',
+  FILE_DOWNLOAD = 'FILE_DOWNLOAD',
+  
+  SYSTEM = 'SYSTEM',
+}
 
 type User = {
   id: number;
@@ -122,7 +140,7 @@ function AdminContent() {
     queryKey: ["/api/logs", logType],
     queryFn: async ({ queryKey }) => {
       const [endpoint, filterType] = queryKey;
-      const url = filterType ? `${endpoint}?type=${filterType}` : endpoint;
+      const url = filterType ? `${endpoint as string}?type=${filterType as string}` : endpoint as string;
       return await apiRequest({ method: "GET", url });
     },
     enabled: !!user && user.role === "admin" && activeTab === "logs",
@@ -606,8 +624,8 @@ function AdminContent() {
                   {/* Filter and refresh */}
                   <div className="flex space-x-2 w-full md:w-1/3 justify-end">
                     <Select
-                      value={logType}
-                      onValueChange={setLogType}
+                      value={logType || ""}
+                      onValueChange={(value) => setLogType(value === "" ? undefined : value)}
                     >
                       <SelectTrigger className="w-40 md:w-48">
                         <div className="flex items-center">
@@ -616,7 +634,7 @@ function AdminContent() {
                         </div>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={undefined}>All Types</SelectItem>
+                        <SelectItem value="">All Types</SelectItem>
                         <SelectItem value="USER_REGISTER">Registration</SelectItem>
                         <SelectItem value="USER_LOGIN">Login</SelectItem>
                         <SelectItem value="USER_LOGOUT">Logout</SelectItem>
