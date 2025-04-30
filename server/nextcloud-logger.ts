@@ -38,33 +38,71 @@ export class NextCloudLogger {
       
       if (fileExists) {
         console.log('Loading existing logs from NextCloud...');
-        const logsContent = await this.client.getFileContents(logsFile, { format: 'text' });
-        
-        if (logsContent && typeof logsContent === 'string' && logsContent.trim()) {
-          try {
-            this.logs = JSON.parse(logsContent);
-            console.log(`Loaded ${this.logs.length} log entries from NextCloud`);
-          } catch (error) {
-            console.error('Failed to parse logs.json file:', error);
-            // Initialize with empty logs
+        try {
+          const logsContent = await this.client.getFileContents(logsFile, { format: 'text' });
+          
+          if (logsContent && typeof logsContent === 'string' && logsContent.trim()) {
+            try {
+              this.logs = JSON.parse(logsContent);
+              console.log(`Loaded ${this.logs.length} log entries from NextCloud`);
+            } catch (error) {
+              console.error('Failed to parse logs.json file:', error);
+              // Initialize with empty logs
+              this.logs = [];
+              // Create a backup of the corrupted file
+              const timestamp = Date.now();
+              await this.client.moveFile(
+                logsFile,
+                `${logsDir}/logs_backup_${timestamp}.json`
+              );
+              console.log(`Created backup of corrupted logs file: logs_backup_${timestamp}.json`);
+              
+              // Create a new empty logs file
+              await this.client.putFileContents(
+                logsFile,
+                JSON.stringify([]),
+                { overwrite: true }
+              );
+              console.log('Created new empty logs file after backup');
+            }
+          } else {
+            console.log('Logs file exists but is empty, initializing with empty logs');
             this.logs = [];
-            // Create a backup of the corrupted file
-            const timestamp = Date.now();
-            await this.client.moveFile(
+            
+            // Make sure it's properly initialized as valid JSON
+            await this.client.putFileContents(
               logsFile,
-              `${logsDir}/logs_backup_${timestamp}.json`
+              JSON.stringify([]),
+              { overwrite: true }
             );
-            console.log(`Created backup of corrupted logs file: logs_backup_${timestamp}.json`);
+            console.log('Reinitialized empty logs file with valid JSON array');
           }
-        } else {
-          console.log('Logs file exists but is empty, initializing with empty logs');
+        } catch (getError) {
+          console.error('Error retrieving logs file:', getError);
           this.logs = [];
+          // Try to recreate the file
+          await this.client.putFileContents(
+            logsFile,
+            JSON.stringify([]),
+            { overwrite: true }
+          );
+          console.log('Created new empty logs file after retrieval error');
         }
       } else {
         console.log('Logs file does not exist, initializing with empty logs');
         this.logs = [];
-        // Save empty logs array to create the file
-        await this.saveToDisk();
+        // Create an empty logs file with a valid JSON array
+        try {
+          await this.client.putFileContents(
+            logsFile,
+            JSON.stringify([]),
+            { overwrite: true }
+          );
+          console.log('Created new logs file with empty array');
+        } catch (createError) {
+          console.error('Error creating logs file:', createError);
+          // Keep operating with in-memory logs anyway
+        }
       }
       
       this.isInitialized = true;
@@ -89,57 +127,110 @@ export class NextCloudLogger {
       const logsDir = `${this.baseFolder}/logs`;
       const logsFile = `${logsDir}/logs.json`;
       
-      // Create a backup of the current logs file
-      const fileExists = await this.client.exists(logsFile);
-      if (fileExists) {
+      // Ensure logs directory exists
+      try {
+        const dirExists = await this.client.exists(logsDir);
+        if (!dirExists) {
+          console.log(`Creating logs directory during save: ${logsDir}`);
+          await this.client.createDirectory(logsDir);
+        }
+      } catch (dirError) {
+        console.error('Error ensuring logs directory exists during save:', dirError);
+        
+        // Try to create directory with full path
         try {
-          const timestamp = Date.now();
-          const backupFileName = `logs_backup_${timestamp}.json`;
-          await this.client.copyFile(
-            logsFile,
-            `${logsDir}/${backupFileName}`
-          );
-          
-          // Keep only the most recent 5 backups to avoid filling the storage
-          const dirContents = await this.client.getDirectoryContents(logsDir);
-          // Convert dirContents to array if needed
-          const contentArray = Array.isArray(dirContents) ? dirContents : 'data' in dirContents ? dirContents.data : [];
-          
-          const backups = contentArray
-            .filter((item: any) => 
-              typeof item.basename === 'string' && 
-              item.basename.startsWith('logs_backup_') && 
-              item.basename.endsWith('.json') &&
-              item.basename !== backupFileName
-            )
-            .sort((a: any, b: any) => b.lastmod - a.lastmod);
-          
-          // Delete oldest backups if there are more than 5
-          if (backups.length > 4) {
-            const oldestBackups = backups.slice(4);
-            for (const backup of oldestBackups) {
-              try {
-                await this.client.deleteFile(`${logsDir}/${backup.basename}`);
-                console.log(`Deleted old logs backup: ${backup.basename}`);
-              } catch (error) {
-                console.error(`Failed to delete old logs backup ${backup.basename}:`, error);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Failed to create logs backup:', error);
-          // Continue anyway
+          await this.client.createDirectory(logsDir, { recursive: true });
+          console.log(`Created logs directory with recursive option: ${logsDir}`);
+        } catch (recursiveError) {
+          console.error('Failed to create logs directory recursively:', recursiveError);
+          // Continue and attempt to save anyway
         }
       }
       
-      // Save logs to NextCloud
-      await this.client.putFileContents(
-        logsFile,
-        JSON.stringify(this.logs, null, 2),
-        { overwrite: true }
-      );
+      // Create a backup of the current logs file
+      try {
+        const fileExists = await this.client.exists(logsFile);
+        if (fileExists) {
+          try {
+            const timestamp = Date.now();
+            const backupFileName = `logs_backup_${timestamp}.json`;
+            await this.client.copyFile(
+              logsFile,
+              `${logsDir}/${backupFileName}`
+            );
+            console.log(`Created logs backup: ${backupFileName}`);
+            
+            // Keep only the most recent 5 backups to avoid filling the storage
+            try {
+              const dirContents = await this.client.getDirectoryContents(logsDir);
+              // Convert dirContents to array if needed
+              const contentArray = Array.isArray(dirContents) ? dirContents : 'data' in dirContents ? dirContents.data : [];
+              
+              const backups = contentArray
+                .filter((item: any) => 
+                  typeof item.basename === 'string' && 
+                  item.basename.startsWith('logs_backup_') && 
+                  item.basename.endsWith('.json') &&
+                  item.basename !== backupFileName
+                )
+                .sort((a: any, b: any) => {
+                  // Handle cases where lastmod might not be available or valid
+                  const lastModA = a.lastmod ? new Date(a.lastmod).getTime() : 0;
+                  const lastModB = b.lastmod ? new Date(b.lastmod).getTime() : 0;
+                  return lastModB - lastModA;
+                });
+              
+              // Delete oldest backups if there are more than 5
+              if (backups.length > 4) {
+                const oldestBackups = backups.slice(4);
+                for (const backup of oldestBackups) {
+                  try {
+                    await this.client.deleteFile(`${logsDir}/${backup.basename}`);
+                    console.log(`Deleted old logs backup: ${backup.basename}`);
+                  } catch (error) {
+                    console.error(`Failed to delete old logs backup ${backup.basename}:`, error);
+                  }
+                }
+              }
+            } catch (cleanupError) {
+              console.error('Error cleaning up old backups:', cleanupError);
+              // Continue anyway
+            }
+          } catch (backupError) {
+            console.error('Failed to create logs backup:', backupError);
+            // Continue anyway
+          }
+        }
+      } catch (existsError) {
+        console.error('Error checking if logs file exists:', existsError);
+        // Continue anyway
+      }
       
-      console.log(`Saved ${this.logs.length} log entries to NextCloud`);
+      // Save logs to NextCloud
+      try {
+        await this.client.putFileContents(
+          logsFile,
+          JSON.stringify(this.logs, null, 2),
+          { overwrite: true }
+        );
+        
+        console.log(`Saved ${this.logs.length} log entries to NextCloud`);
+      } catch (saveError) {
+        console.error('Error saving logs to file:', saveError);
+        
+        // Try one more time with a simplified approach
+        try {
+          await this.client.putFileContents(
+            logsFile,
+            JSON.stringify(this.logs),
+            { overwrite: true }
+          );
+          console.log(`Saved ${this.logs.length} log entries to NextCloud (retry succeeded)`);
+        } catch (retryError) {
+          console.error('Final attempt to save logs failed:', retryError);
+          throw retryError; // Let the outer catch handle it
+        }
+      }
     } catch (error) {
       console.error('Failed to save logs to NextCloud:', error);
     }
