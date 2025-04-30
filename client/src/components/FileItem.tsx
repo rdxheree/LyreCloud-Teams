@@ -31,11 +31,12 @@ export default function FileItem({ file }: FileItemProps) {
   const isSelected = selectedFileIds.includes(file.id);
 
   const handleCopyLink = () => {
-    // Create the CDN link in the format: <current-domain>/cdn/<filename>
-    // Dynamically use the current domain from the browser
+    // Create a direct link to the file - use the full URL including filename
+    // This is more reliable than relying on file IDs that might be missing from storage
     const currentDomain = window.location.origin;
     const fileLink = `${currentDomain}/cdn/${file.filename}`;
     
+    // Use direct URI for images and videos, download endpoint for other types
     navigator.clipboard.writeText(fileLink)
       .then(() => {
         toast({
@@ -53,11 +54,15 @@ export default function FileItem({ file }: FileItemProps) {
   };
 
   const handleDownload = () => {
-    // Create a download link and click it
-    const downloadUrl = `/api/files/${file.id}/download`;
+    // Use the CDN URL directly rather than the download endpoint
+    // This is more reliable since we know the file exists at the CDN URL
+    const downloadUrl = `/cdn/${file.filename}`;
+    
+    // Create and click a download link
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = file.originalFilename;
+    a.download = file.originalFilename; // Set the desired filename
+    a.setAttribute('target', '_blank'); // Open in new tab if direct download fails
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

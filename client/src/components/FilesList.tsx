@@ -65,17 +65,13 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
     }
   }, [queryClient, isRefreshing]);
   
-  // Refresh files when component mounts
+  // Refresh files only when component mounts
   useEffect(() => {
-    // Refresh files on page load
+    // Only refresh once on initial page load, no recurring updates
     refreshFiles();
     
-    // Set up an interval to refresh files every 20 seconds
-    const interval = setInterval(refreshFiles, 20000);
-    
-    // Clean up interval
-    return () => clearInterval(interval);
-  }, [refreshFiles]);
+    // No intervals - prevent infinite refreshes
+  }, []);
   
   // Sort files based on current sort criteria
   const sortedFiles = [...files].sort((a, b) => {
@@ -199,22 +195,28 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
     
     // Create a download link for each file and click it
     try {
+      let successCount = 0;
+      
       selectedFileIds.forEach(id => {
         const file = files.find(f => f.id === id);
         if (!file) return;
         
-        const downloadUrl = `/api/files/${id}/download`;
+        // Use CDN endpoint instead of download endpoint for reliability
+        const downloadUrl = `/cdn/${file.filename}`;
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = file.originalFilename;
+        a.setAttribute('target', '_blank');
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        
+        successCount++;
       });
       
       toast({
         title: "Downloads started",
-        description: `Downloading ${selectedFileIds.length} ${selectedFileIds.length === 1 ? 'file' : 'files'}`,
+        description: `Downloading ${successCount} ${successCount === 1 ? 'file' : 'files'}`,
       });
       
       // Exit multi-select mode after a delay
