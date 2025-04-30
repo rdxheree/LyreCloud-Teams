@@ -136,7 +136,7 @@ function AdminContent() {
   });
 
   // Fetch logs
-  const { data: logsResponse, isLoading: isLoadingLogs } = useQuery({
+  const { data: logsResponse, isLoading: isLoadingLogs } = useQuery<{logs: LogEntry[]}>({
     queryKey: ["/api/logs", logType],
     queryFn: async ({ queryKey }) => {
       const [endpoint, filterType] = queryKey;

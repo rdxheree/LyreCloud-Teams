@@ -267,22 +267,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Log file access/view through CDN
         // Try to get the user if authenticated
-        let username = "anonymous";
-        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
-          username = (req.user as any).username || "anonymous";
-        }
+        // File view logging disabled as requested
+        // let username = "anonymous";
+        // if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+        //   username = (req.user as any).username || "anonymous";
+        // }
         
-        await createLog(
-          LogType.FILE_DOWNLOAD,
-          `File viewed in CDN: ${file.originalFilename}`,
-          username,
-          { 
-            fileId: file.id, 
-            filename: file.filename,
-            originalFilename: file.originalFilename,
-            method: "cdn"
-          }
-        );
+        // await createLog(
+        //   LogType.FILE_DOWNLOAD,
+        //   `File viewed in CDN: ${file.originalFilename}`,
+        //   username,
+        //   { 
+        //     fileId: file.id, 
+        //     filename: file.filename,
+        //     originalFilename: file.originalFilename,
+        //     method: "cdn"
+        //   }
+        // );
         
         fileStream.pipe(res);
       } catch (streamError) {
@@ -339,23 +340,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get a readable stream from storage (works for both local and NextCloud)
         const fileStream = await storage.createReadStream(file.path);
         
-        // Log file download
-        let username = "anonymous";
-        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
-          username = (req.user as any).username || "anonymous";
-        }
+        // File download logging disabled as requested
+        // let username = "anonymous";
+        // if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+        //   username = (req.user as any).username || "anonymous";
+        // }
         
-        await createLog(
-          LogType.FILE_DOWNLOAD,
-          `File downloaded: ${file.originalFilename}`,
-          username,
-          { 
-            fileId: file.id, 
-            filename: file.filename,
-            originalFilename: file.originalFilename,
-            method: "download"
-          }
-        );
+        // await createLog(
+        //   LogType.FILE_DOWNLOAD,
+        //   `File downloaded: ${file.originalFilename}`,
+        //   username,
+        //   { 
+        //     fileId: file.id, 
+        //     filename: file.filename,
+        //     originalFilename: file.originalFilename,
+        //     method: "download"
+        //   }
+        // );
         
         fileStream.pipe(res);
       } catch (streamError) {
