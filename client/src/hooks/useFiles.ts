@@ -84,7 +84,10 @@ export function useDeleteFile() {
 
   return useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest('DELETE', `/api/files/${id}`);
+      await apiRequest<{ message: string }>({
+        method: 'DELETE',
+        url: `/api/files/${id}`
+      });
       return id;
     },
     onSuccess: (id) => {
