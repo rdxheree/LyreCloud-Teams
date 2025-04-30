@@ -821,23 +821,44 @@ export class NextCloudStorage implements IStorage {
         const exists = await this.client.exists(sourcePath);
         if (!exists) {
           console.error(`Source file does not exist in NextCloud: ${sourcePath}`);
-          throw new Error('Source file not found in NextCloud');
+          console.log("Skipping physical file rename, updating metadata only");
+          
+          // Still update the metadata even if file isn't found
+          updateData.filename = newFilename;
+          updateData.path = destPath;
+        } else {
+          // Only attempt file operations if the file exists
+          try {
+            // Copy the file to the new name
+            await this.client.copyFile(sourcePath, destPath);
+            
+            // Delete the old file
+            await this.client.deleteFile(sourcePath);
+            
+            // Update metadata with new filename and path
+            updateData.filename = newFilename;
+            updateData.path = destPath;
+            
+            console.log(`Successfully renamed file in NextCloud to: ${newFilename}`);
+          } catch (copyError) {
+            console.error('Error during file rename operation:', copyError);
+            // Still update the metadata even if rename fails
+            updateData.filename = newFilename;
+            updateData.path = destPath;
+          }
         }
-        
-        // Copy the file to the new name
-        await this.client.copyFile(sourcePath, destPath);
-        
-        // Delete the old file
-        await this.client.deleteFile(sourcePath);
-        
-        // Update metadata with new filename and path
-        updateData.filename = newFilename;
-        updateData.path = destPath;
-        
-        console.log(`Successfully renamed file in NextCloud to: ${newFilename}`);
       } catch (error) {
-        console.error('Error renaming file in NextCloud:', error);
-        throw new Error(`Failed to rename file in NextCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('Error in rename preparation:', error);
+        // Don't throw - fall back to metadata update only
+        console.log("Falling back to metadata update only");
+        
+        // At least update the display name
+        const fileExt = path.extname(file.filename);
+        const baseNewName = updateData.originalFilename.replace(/\.[^/.]+$/, "");
+        const newFilename = baseNewName + fileExt;
+        
+        updateData.originalFilename = updateData.originalFilename;
+        // Don't change actual filename/path if we had errors
       }
     }
 

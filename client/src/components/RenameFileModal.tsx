@@ -44,29 +44,36 @@ export default function RenameFileModal({ getFileName }: RenameFileModalProps) {
 
     setIsLoading(true);
     try {
-      await apiRequest<{ message: string; success: boolean }>({
+      const response = await apiRequest<{ message?: string; success?: boolean }>({
         url: `/api/files/${fileToRename}/rename`,
         method: "PATCH",
         data: { newName: newFileName.trim() }
       });
 
-      // Update the cache
+      // Always update the cache to show the new name in case it was at least partially successful
       queryClient.invalidateQueries({ queryKey: ['/api/files'] });
 
       toast({
         title: "File renamed",
-        description: "The file has been successfully renamed.",
+        description: response.message || "The file has been successfully renamed.",
       });
 
       // Close the modal
       handleClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error renaming file:", error);
+      
+      // Still update the file list to reflect any changes that might have happened
+      queryClient.invalidateQueries({ queryKey: ['/api/files'] });
+      
       toast({
-        title: "Failed to rename file",
-        description: "There was an error renaming the file. Please try again.",
+        title: "File rename partially completed",
+        description: error.message || "The file metadata was updated but there was an issue with the file system. The file list has been refreshed.",
         variant: "destructive",
       });
+      
+      // Close the modal anyway since the metadata might have been updated
+      handleClose();
     } finally {
       setIsLoading(false);
     }

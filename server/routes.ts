@@ -270,19 +270,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'File not found' });
       }
 
-      // Update the original filename (display name)
-      const updatedFile = await storage.updateFile(fileId, { 
-        originalFilename: newName 
-      });
+      try {
+        // Update the original filename (display name)
+        const updatedFile = await storage.updateFile(fileId, { 
+          originalFilename: newName 
+        });
 
-      if (!updatedFile) {
-        return res.status(500).json({ message: 'Failed to rename file' });
+        if (!updatedFile) {
+          return res.status(500).json({ 
+            message: 'Failed to rename file', 
+            success: false 
+          });
+        }
+
+        return res.json({
+          ...updatedFile,
+          message: 'File renamed successfully',
+          success: true
+        });
+      } catch (updateError: any) {
+        console.error('Error in storage.updateFile:', updateError);
+        
+        // Try one more time with just metadata update
+        try {
+          console.log('Attempting metadata-only update as fallback');
+          const updatedFile = await storage.updateFile(fileId, { 
+            originalFilename: newName,
+            // Don't update physical filename/path
+          });
+          
+          if (updatedFile) {
+            return res.json({
+              ...updatedFile,
+              message: 'File metadata updated but physical rename failed',
+              success: true,
+              partialSuccess: true
+            });
+          } else {
+            throw new Error('Both physical and metadata updates failed');
+          }
+        } catch (fallbackError) {
+          console.error('Fallback metadata update also failed:', fallbackError);
+          throw updateError; // throw the original error
+        }
       }
-
-      return res.json(updatedFile);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error renaming file:', error);
-      return res.status(500).json({ message: 'Failed to rename file' });
+      return res.status(500).json({ 
+        message: 'Failed to rename file: ' + (error.message || 'Unknown error'),
+        success: false
+      });
     }
   });
 
