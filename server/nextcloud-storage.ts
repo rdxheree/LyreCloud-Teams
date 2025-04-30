@@ -808,7 +808,7 @@ export class NextCloudStorage implements IStorage {
     return file;
   }
   
-  // Create a nicely formatted individual JSON file for each uploaded file
+  // Create a nicely formatted individual JSON file for each uploaded file in a separate metadata folder
   private async saveIndividualFileMetadata(file: File): Promise<void> {
     try {
       // Format file size in a human-readable format
@@ -854,14 +854,34 @@ export class NextCloudStorage implements IStorage {
       // Generate a JSON string with proper formatting
       const jsonContent = JSON.stringify(metadata, null, 2);
       
-      // Name the metadata file with same name as the original file plus .json extension
+      // Create a metadata folder if it doesn't exist
+      let metadataFolder = `${this.baseFolder}/metadata`;
+      try {
+        const folderExists = await this.client.exists(metadataFolder);
+        if (!folderExists) {
+          console.log(`Creating metadata folder: ${metadataFolder}`);
+          await this.client.createDirectory(metadataFolder);
+        }
+      } catch (folderError) {
+        console.error('Error checking/creating metadata folder:', folderError);
+        // Create it anyway and catch any error
+        try {
+          await this.client.createDirectory(metadataFolder);
+        } catch (createError) {
+          // If it still fails, we'll save in the base folder instead
+          console.error('Failed to create metadata folder, using base folder instead');
+          metadataFolder = this.baseFolder;
+        }
+      }
+      
+      // Name the metadata file with same name as the original file
       const metadataFilename = `${file.filename}.json`;
-      const metadataPath = this.getFullPath(metadataFilename);
+      const metadataPath = `${metadataFolder}/${metadataFilename}`;
       
       // Save the file to NextCloud
       await this.client.putFileContents(metadataPath, jsonContent, { overwrite: true });
       
-      console.log(`Individual metadata file created: ${metadataFilename}`);
+      console.log(`Individual metadata file created in metadata folder: ${metadataFilename}`);
     } catch (error) {
       console.error(`Error creating individual metadata file for ${file.filename}:`, error);
       // Don't throw - this is an enhancement, not critical
@@ -910,14 +930,47 @@ export class NextCloudStorage implements IStorage {
             
             // Also try to rename the individual JSON metadata file if it exists
             try {
-              const oldMetadataPath = `${sourcePath}.json`;
-              const newMetadataPath = `${destPath}.json`;
+              const metadataFilename = `${file.filename}.json`;
+              const newMetadataFilename = `${newFilename}.json`;
               
+              // First check the new metadata folder
+              const metadataFolder = `${this.baseFolder}/metadata`;
+              const oldMetadataPath = `${metadataFolder}/${metadataFilename}`;
+              const newMetadataPath = `${metadataFolder}/${newMetadataFilename}`;
+              
+              // Create the metadata folder if it doesn't exist
+              try {
+                const folderExists = await this.client.exists(metadataFolder);
+                if (!folderExists) {
+                  console.log(`Creating metadata folder during rename: ${metadataFolder}`);
+                  await this.client.createDirectory(metadataFolder);
+                }
+              } catch (folderError) {
+                console.error('Error checking/creating metadata folder during rename:', folderError);
+              }
+              
+              let metadataRenamed = false;
+              
+              // Check if metadata exists in the metadata folder
               const metadataExists = await this.client.exists(oldMetadataPath);
               if (metadataExists) {
                 await this.client.copyFile(oldMetadataPath, newMetadataPath);
                 await this.client.deleteFile(oldMetadataPath);
-                console.log(`Renamed individual metadata file to: ${path.basename(newMetadataPath)}`);
+                console.log(`Renamed metadata file in metadata folder to: ${newMetadataFilename}`);
+                metadataRenamed = true;
+              }
+              
+              // As a fallback, check the old location
+              if (!metadataRenamed) {
+                const oldStyleMetadataPath = `${sourcePath}.json`;
+                const oldStyleMetadataExists = await this.client.exists(oldStyleMetadataPath);
+                
+                if (oldStyleMetadataExists) {
+                  // Instead of keeping it in the old location, move it to the metadata folder
+                  await this.client.copyFile(oldStyleMetadataPath, newMetadataPath);
+                  await this.client.deleteFile(oldStyleMetadataPath);
+                  console.log(`Moved metadata file from old location to metadata folder: ${newMetadataFilename}`);
+                }
               }
             } catch (metadataError) {
               console.error('Error renaming individual metadata JSON file:', metadataError);
@@ -985,15 +1038,24 @@ export class NextCloudStorage implements IStorage {
         await this.client.deleteFile(file.path);
       }
       
-      // Also try to delete the individual JSON metadata file
+      // Also try to delete the individual JSON metadata file from the metadata folder
       try {
         const metadataFilename = `${file.filename}.json`;
-        const metadataPath = this.getFullPath(metadataFilename);
+        const metadataPath = `${this.baseFolder}/metadata/${metadataFilename}`;
         
+        // First check the metadata folder
         const metadataExists = await this.client.exists(metadataPath);
         if (metadataExists) {
           await this.client.deleteFile(metadataPath);
-          console.log(`Deleted individual metadata file: ${metadataFilename}`);
+          console.log(`Deleted individual metadata file from metadata folder: ${metadataFilename}`);
+        } else {
+          // As a fallback, check if there's a metadata file in the old location (cdns folder)
+          const oldMetadataPath = this.getFullPath(metadataFilename);
+          const oldMetadataExists = await this.client.exists(oldMetadataPath);
+          if (oldMetadataExists) {
+            await this.client.deleteFile(oldMetadataPath);
+            console.log(`Deleted individual metadata file from old location: ${metadataFilename}`);
+          }
         }
       } catch (jsonError) {
         console.error(`Error deleting individual metadata JSON file for ${file.filename}:`, jsonError);
