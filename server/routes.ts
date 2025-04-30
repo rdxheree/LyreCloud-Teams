@@ -745,6 +745,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  
+  // Webhook configuration endpoints
+  app.get('/api/webhook', isAdmin, async (_req: Request, res: Response) => {
+    try {
+      // Only available if storage is NextCloud
+      if (storage instanceof NextCloudStorage) {
+        const webhookService = WebhookService.getInstance(storage);
+        const config = webhookService.getConfig();
+        return res.json(config || { url: '', enabled: false });
+      } else {
+        return res.status(400).json({ 
+          message: 'Webhook functionality requires NextCloud storage',
+          success: false
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching webhook config:', error);
+      return res.status(500).json({ 
+        message: 'Failed to fetch webhook configuration',
+        success: false
+      });
+    }
+  });
+  
+  app.post('/api/webhook', isAdmin, async (req: Request, res: Response) => {
+    try {
+      // Only available if storage is NextCloud
+      if (storage instanceof NextCloudStorage) {
+        const { url, enabled } = req.body;
+        
+        const webhookService = WebhookService.getInstance(storage);
+        const updatedConfig = await webhookService.updateConfig({ url, enabled });
+        
+        // Get username for logging
+        let username = "system";
+        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+          username = (req.user as any).username || "system";
+        }
+        
+        // Log the webhook update
+        await createLog(
+          LogType.SYSTEM,
+          `Webhook configuration updated: ${enabled ? 'enabled' : 'disabled'}`,
+          username,
+          { url, enabled }
+        );
+        
+        return res.json({ 
+          config: updatedConfig,
+          success: true 
+        });
+      } else {
+        return res.status(400).json({ 
+          message: 'Webhook functionality requires NextCloud storage',
+          success: false
+        });
+      }
+    } catch (error) {
+      console.error('Error updating webhook config:', error);
+      return res.status(500).json({ 
+        message: 'Failed to update webhook configuration',
+        success: false
+      });
+    }
+  });
+  
+  app.post('/api/webhook/test', isAdmin, async (req: Request, res: Response) => {
+    try {
+      // Only available if storage is NextCloud
+      if (storage instanceof NextCloudStorage) {
+        const webhookService = WebhookService.getInstance(storage);
+        const result = await webhookService.testConnection();
+        
+        // Get username for logging
+        let username = "system";
+        if (req.isAuthenticated && req.isAuthenticated() && req.user) {
+          username = (req.user as any).username || "system";
+        }
+        
+        // Log the test result
+        await createLog(
+          LogType.SYSTEM,
+          `Webhook test ${result.success ? 'successful' : 'failed'}: ${result.message}`,
+          username
+        );
+        
+        return res.json(result);
+      } else {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Webhook functionality requires NextCloud storage'
+        });
+      }
+    } catch (error) {
+      console.error('Error testing webhook:', error);
+      return res.status(500).json({ 
+        success: false,
+        message: 'Failed to test webhook connection'
+      });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

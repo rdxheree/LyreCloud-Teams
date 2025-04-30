@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
+import WebhookSettings from "@/components/WebhookSettings";
 import {
   Table,
   TableBody,
