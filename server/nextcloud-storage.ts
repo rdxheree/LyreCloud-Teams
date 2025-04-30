@@ -384,7 +384,7 @@ export class NextCloudStorage implements IStorage {
         const now = new Date();
         const mimeType = item.mime || this.getMimeTypeFromFilename(filename);
         
-        // Create a file record
+        // Create a file record - DO NOT set a default uploadedBy yet
         const newFile: File = {
           id: this.fileCurrentId++,
           filename: filename,
@@ -394,21 +394,69 @@ export class NextCloudStorage implements IStorage {
           mimeType: mimeType,
           uploadedAt: now,
           isDeleted: false,
-          uploadedBy: "system"
+          uploadedBy: "" // Empty string initially
         };
         
-        // Apply metadata if available
+        // CRITICAL BUG FIX: Check for metadata in the "right" order
+        
+        // First check the global metadata - it's only used as backup
+        let metadataFound = false;
+        
+        // Check if we have metadata in our global files.json
         if (this.fileMetadata && this.fileMetadata[filename]) {
           const savedMetadata = this.fileMetadata[filename];
           if (savedMetadata.uploadedBy) {
             newFile.uploadedBy = savedMetadata.uploadedBy;
-            console.log(`Applied uploadedBy from master metadata: ${filename} -> ${savedMetadata.uploadedBy}`);
+            console.log(`Applied uploadedBy from global metadata: ${filename} -> ${savedMetadata.uploadedBy}`);
+            metadataFound = true;
           }
           if (savedMetadata.uploadedAt) newFile.uploadedAt = new Date(savedMetadata.uploadedAt);
           if (savedMetadata.originalFilename) newFile.originalFilename = savedMetadata.originalFilename;
-        } else {
-          // Log a clear message that we couldn't find metadata for this file
-          console.log(`No master metadata found for file: ${filename}, keeping default uploadedBy: ${newFile.uploadedBy}`);
+        }
+        
+        // Then check for individual metadata files which take priority
+        try {
+          // First try the new metadata location
+          const metadataFolder = `${this.baseFolder}/metadata`;
+          const metadataPath = `${metadataFolder}/${filename}.json`;
+          
+          // See if the individual metadata file exists
+          const metadataExists = await this.client.exists(metadataPath);
+          
+          if (metadataExists) {
+            try {
+              // Read the metadata file
+              const metadataContent = await this.client.getFileContents(metadataPath, { format: 'text' });
+              
+              if (typeof metadataContent === 'string') {
+                const individualMetadata = JSON.parse(metadataContent);
+                
+                // Use the individual metadata (it takes priority)
+                if (individualMetadata.uploaded_by) {
+                  newFile.uploadedBy = individualMetadata.uploaded_by;
+                  console.log(`Applied uploadedBy from individual metadata file: ${filename} -> ${individualMetadata.uploaded_by}`);
+                  metadataFound = true;
+                }
+                
+                // Update other metadata if available
+                if (individualMetadata.filename) {
+                  newFile.originalFilename = individualMetadata.filename;
+                }
+                
+                // The individual metadata date might be formatted, so don't try to parse it
+              }
+            } catch (metadataError) {
+              console.error(`Error reading individual metadata for ${filename}:`, metadataError);
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking for individual metadata file for ${filename}:`, error);
+        }
+        
+        // If we still don't have uploadedBy info, use rdxhere.exe as a default (never "system")
+        if (!metadataFound || !newFile.uploadedBy) {
+          newFile.uploadedBy = "rdxhere.exe";
+          console.log(`No metadata found for ${filename}, using default value rdxhere.exe`);
         }
         
         this.files.set(newFile.id, newFile);
