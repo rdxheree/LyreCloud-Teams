@@ -7,6 +7,7 @@ import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
 import MemoryStore from "memorystore";
+import { createLog, LogType } from "./logger";
 
 declare global {
   namespace Express {
@@ -131,6 +132,14 @@ export function setupAuth(app: Express) {
         
         console.log(`User ${username} registered successfully with ID ${newUser.id}`);
         
+        // Log the registration event
+        await createLog(
+          LogType.USER_REGISTER,
+          `New user registered: ${username}`,
+          "system",
+          { userId: newUser.id, username: newUser.username, status: "pending" }
+        );
+        
         res.status(201).json({ 
           message: "Registration successful. Your account is pending admin approval." 
         });
@@ -145,28 +154,57 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate("local", (err: Error, user: SelectUser, info: { message: string }) => {
+    passport.authenticate("local", async (err: Error, user: SelectUser, info: { message: string }) => {
       if (err) {
         return next(err);
       }
       if (!user) {
+        // Log failed login attempt
+        await createLog(
+          LogType.USER_LOGIN,
+          `Failed login attempt for user: ${req.body.username}`,
+          "system",
+          { username: req.body.username, reason: info.message || "Authentication failed" }
+        );
         return res.status(401).json({ message: info.message || "Authentication failed" });
       }
-      req.login(user, (loginErr) => {
+      req.login(user, async (loginErr) => {
         if (loginErr) {
           return next(loginErr);
         }
+        
+        // Log successful login
+        await createLog(
+          LogType.USER_LOGIN,
+          `User logged in: ${user.username}`,
+          user.username,
+          { userId: user.id, role: user.role }
+        );
+        
         const { password, ...userWithoutPassword } = user;
         return res.json(userWithoutPassword);
       });
     })(req, res, next);
   });
 
-  app.post("/api/logout", (req: Request, res: Response) => {
-    req.logout((err) => {
+  app.post("/api/logout", async (req: Request, res: Response) => {
+    // Get the username before logging out
+    const username = req.user ? (req.user as SelectUser).username : "unknown";
+    const userId = req.user ? (req.user as SelectUser).id : 0;
+    
+    req.logout(async (err) => {
       if (err) {
         return res.status(500).json({ message: "Error logging out" });
       }
+      
+      // Log the logout event
+      await createLog(
+        LogType.USER_LOGOUT,
+        `User logged out: ${username}`,
+        username,
+        { userId: userId }
+      );
+      
       res.json({ message: "Logged out successfully" });
     });
   });
@@ -226,6 +264,14 @@ export function setupAuth(app: Express) {
         return res.status(500).json({ message: "Failed to update user" });
       }
       
+      // Log user approval
+      await createLog(
+        LogType.USER_APPROVE,
+        `User approved: ${user.username}`,
+        (req.user as SelectUser).username,
+        { userId: user.id, username: user.username, approvedBy: (req.user as SelectUser).username }
+      );
+      
       const { password, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -252,6 +298,14 @@ export function setupAuth(app: Express) {
         return res.status(500).json({ message: "Failed to update user" });
       }
       
+      // Log user rejection
+      await createLog(
+        LogType.USER_REJECT,
+        `User rejected: ${user.username}`,
+        (req.user as SelectUser).username,
+        { userId: user.id, username: user.username, rejectedBy: (req.user as SelectUser).username }
+      );
+      
       const { password, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -276,6 +330,14 @@ export function setupAuth(app: Express) {
       if (!updatedUser) {
         return res.status(500).json({ message: "Failed to update user" });
       }
+      
+      // Log making a user admin
+      await createLog(
+        LogType.USER_ADMIN,
+        `User ${user.username} was given admin rights`,
+        (req.user as SelectUser).username,
+        { userId: user.id, username: user.username, grantedBy: (req.user as SelectUser).username }
+      );
       
       const { password, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
@@ -307,6 +369,14 @@ export function setupAuth(app: Express) {
         return res.status(500).json({ message: "Failed to update user" });
       }
       
+      // Log removing admin rights
+      await createLog(
+        LogType.USER_ADMIN_REMOVE,
+        `Admin rights removed from user: ${user.username}`,
+        (req.user as SelectUser).username,
+        { userId: user.id, username: user.username, removedBy: (req.user as SelectUser).username }
+      );
+      
       const { password, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -334,6 +404,14 @@ export function setupAuth(app: Express) {
       if (!success) {
         return res.status(500).json({ message: "Failed to delete user" });
       }
+      
+      // Log user deletion
+      await createLog(
+        LogType.USER_DELETE,
+        `User deleted: ${user.username}`,
+        (req.user as SelectUser).username,
+        { userId: user.id, username: user.username, deletedBy: (req.user as SelectUser).username }
+      );
       
       res.json({ message: "User deleted successfully" });
     } catch (error) {
