@@ -11,6 +11,7 @@ import { setupAuth } from "./auth";
 import { createLog, LogType } from "./logger";
 import { WebhookService } from "./webhook";
 import { NextCloudStorage } from "./nextcloud-storage";
+import { keepAliveService } from "./keep-alive";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -843,6 +844,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ 
         success: false,
         message: 'Failed to test webhook connection'
+      });
+    }
+  });
+  
+  // Keep-alive service endpoints
+  app.get('/api/system/keep-alive/status', isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const status = keepAliveService.getStatus();
+      return res.json({
+        success: true,
+        ...status,
+        lastRunTime: status.lastRunTime?.toISOString(),
+        nextRunTime: status.nextRunTime?.toISOString(),
+      });
+    } catch (error: any) {
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message
+      });
+    }
+  });
+  
+  app.post('/api/system/keep-alive/start', isAdmin, async (_req: Request, res: Response) => {
+    try {
+      keepAliveService.start();
+      const status = keepAliveService.getStatus();
+      return res.json({
+        success: true,
+        message: 'Keep-alive service started',
+        ...status,
+        lastRunTime: status.lastRunTime?.toISOString(),
+        nextRunTime: status.nextRunTime?.toISOString(),
+      });
+    } catch (error: any) {
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message
+      });
+    }
+  });
+  
+  app.post('/api/system/keep-alive/stop', isAdmin, async (_req: Request, res: Response) => {
+    try {
+      keepAliveService.stop();
+      const status = keepAliveService.getStatus();
+      return res.json({
+        success: true,
+        message: 'Keep-alive service stopped',
+        ...status,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message
+      });
+    }
+  });
+  
+  app.post('/api/system/keep-alive/trigger', isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const result = await keepAliveService.manualTrigger();
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message
       });
     }
   });

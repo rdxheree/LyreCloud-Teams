@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { keepAliveService } from "./keep-alive";
 
 const app = express();
 app.use(express.json());
@@ -66,5 +67,13 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Start the keep-alive service to ensure file links remain accessible 24/7
+    try {
+      keepAliveService.start();
+      log('KeepAlive service started automatically');
+    } catch (error) {
+      log(`Error starting KeepAlive service: ${error}`);
+    }
   });
 })();
