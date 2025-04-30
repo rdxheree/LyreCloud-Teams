@@ -1,5 +1,14 @@
 import { nanoid } from "nanoid";
 import { storage } from "./storage";
+import { WebhookService } from "./webhook";
+import { NextCloudStorage } from "./nextcloud-storage";
+
+// Initialize webhook service if it's a NextCloud storage
+let webhookService: WebhookService | null = null;
+if (storage instanceof NextCloudStorage) {
+  webhookService = WebhookService.getInstance(storage);
+  webhookService.initialize().catch(console.error);
+}
 
 /**
  * Enum for different log types
@@ -56,6 +65,13 @@ export async function createLog(
     
     // Save to storage
     await storage.saveLogs([logEntry]);
+    
+    // Send to webhook if available
+    if (webhookService) {
+      webhookService.sendLog(logEntry).catch(err => {
+        console.error('Failed to send log to webhook:', err);
+      });
+    }
     
     console.log(`Log created: [${type}] ${message} by ${username}`);
     

@@ -9,6 +9,8 @@ import { insertFileSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { setupAuth } from "./auth";
 import { createLog, LogType } from "./logger";
+import { WebhookService } from "./webhook";
+import { NextCloudStorage } from "./nextcloud-storage";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
