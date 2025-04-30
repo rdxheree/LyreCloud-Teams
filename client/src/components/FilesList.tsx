@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { 
   SlidersHorizontal, 
   Filter, 
@@ -37,6 +37,7 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
   const [fileType, setFileType] = useState<FileType>("all");
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const { 
     selectedFileIds, 
@@ -49,6 +50,32 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Refresh files function
+  const refreshFiles = useCallback(async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['/api/files'] });
+      // Wait for at least 500ms to show the animation
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [queryClient, isRefreshing]);
+  
+  // Refresh files when component mounts
+  useEffect(() => {
+    // Refresh files on page load
+    refreshFiles();
+    
+    // Set up an interval to refresh files every 20 seconds
+    const interval = setInterval(refreshFiles, 20000);
+    
+    // Clean up interval
+    return () => clearInterval(interval);
+  }, [refreshFiles]);
   
   // Sort files based on current sort criteria
   const sortedFiles = [...files].sort((a, b) => {
@@ -259,11 +286,12 @@ export default function FilesList({ files, isLoading, error }: FilesListProps) {
               <Button
                 variant="outline"
                 className="soft-button bg-background px-4 py-2 rounded-full text-neutral-600 font-medium flex items-center"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/files'] })}
+                onClick={refreshFiles}
                 title="Refresh file list"
+                disabled={isRefreshing}
               >
-                <RefreshCw className="h-5 w-5 mr-1" />
-                Refresh
+                <RefreshCw className={`h-5 w-5 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </Button>
               
               <Button
